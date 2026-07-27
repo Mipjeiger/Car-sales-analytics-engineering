@@ -1,0 +1,52 @@
+services:
+  
+  # PostgreSQL Database
+  postgres:
+    image: postgres:18-alpine
+    container_name: postgres_car_analytics
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "car_analytics_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - car_analytics_network
+
+  # Metabase
+  metabase:
+    image: metabase/metabase:latest
+    container_name: metabase
+    ports:
+      - "4001:3000"
+    mem_limit: 1g
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xms512m -Xmx1024m"
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: ${POSTGRES_DB}
+      MB_DB_USER: ${POSTGRES_USER}
+      MB_DB_PASS: ${POSTGRES_PASSWORD}
+      MB_DB_HOST: postgres
+      MB_DB_PORT: 5432
+    volumes:
+      - metabase-data:/metabase-data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - car_analytics_network
+
+volumes:
+  metabase-data:
+
+networks:
+  car_analytics_network:
+    driver: bridge
