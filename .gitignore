@@ -1,0 +1,4 @@
+development/.env
+development/pgdata/18/docker
+**.DS_Store
+.DS_Store
