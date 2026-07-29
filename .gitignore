@@ -2,3 +2,4 @@ development/.env
 development/pgdata/18/docker
 **.DS_Store
 .DS_Store
+development/data_science/catboost_info
