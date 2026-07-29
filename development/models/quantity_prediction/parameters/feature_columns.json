@@ -1,0 +1,17 @@
+[
+    "gender",
+    "income_customer",
+    "dealer_name",
+    "dealer_region",
+    "company",
+    "model",
+    "color",
+    "body_style",
+    "price",
+    "discount",
+    "day_of_week",
+    "season",
+    "week_of_year",
+    "price_band",
+    "sales"
+]

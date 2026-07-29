@@ -1,0 +1,14 @@
+[
+    "day_of_week",
+    "week_of_year",
+    "season",
+    "cost",
+    "gross_sales",
+    "profit",
+    "rolling_mean_7",
+    "rolling_std_7",
+    "rolling_max_7",
+    "quantity",
+    "model",
+    "price_band"
+]

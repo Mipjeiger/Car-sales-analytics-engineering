@@ -1,0 +1,7 @@
+{
+    "subsample": 1.0,
+    "learning_rate": 0.05,
+    "iterations": 350,
+    "depth": 6,
+    "colsample_bylevel": 1.0
+}
