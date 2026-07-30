@@ -27,20 +27,120 @@ st.set_page_config(
 )
 
 # ============================================
+# CUSTOM ANIMATED CSS & STYLING
+# ============================================
+st.markdown("""
+<style>
+    /* Smooth Transitions */
+    * {
+        transition: all 0.25s ease-in-out;
+    }
+
+    /* Custom Gradient Hero Header */
+    .hero-container {
+        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #311042 100%);
+        padding: 2.5rem 2rem;
+        border-radius: 18px;
+        color: white;
+        margin-bottom: 2rem;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        animation: fadeIn 1s ease-in-out;
+    }
+
+    /* Floating Animation for Header Icons */
+    .floating-icon {
+        animation: float 3s ease-in-out infinite;
+        display: inline-block;
+    }
+
+    @keyframes float {
+        0% { transform: translateY(0px); }
+        50% { transform: translateY(-8px); }
+        100% { transform: translateY(0px); }
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Pulsing Badge */
+    .pulse-badge {
+        display: inline-block;
+        padding: 0.35em 0.8em;
+        font-size: 0.8rem;
+        font-weight: 600;
+        border-radius: 20px;
+        background: rgba(16, 185, 129, 0.2);
+        color: #10b981;
+        border: 1px solid #10b981;
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+        animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); }
+        70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    /* Dynamic Card Styles */
+    .info-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 14px;
+        padding: 1.5rem;
+        backdrop-filter: blur(10px);
+    }
+
+    .info-card:hover {
+        transform: translateY(-4px);
+        border-color: #6366f1;
+        box-shadow: 0 12px 24px rgba(99, 102, 241, 0.15);
+    }
+
+    /* Metric Cards Enhancement */
+    [data-testid="stMetric"] {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 1rem;
+        border-radius: 12px;
+        transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+    [data-testid="stMetric"]:hover {
+        transform: translateY(-3px);
+        border-color: #3b82f6;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Feature schema for scalers
+SCALER_FEATURES = [
+    'day_of_week', 'week_of_year', 'season', 'cost', 
+    'gross_sales', 'profit', 'rolling_mean_7', 'rolling_std_7', 
+    'rolling_max_7', 'quantity', 'model', 'price_band'
+]
+
+QTY_MODEL_FEATURES = [
+    'day_of_week', 'week_of_year', 'season', 'cost', 
+    'gross_sales', 'profit', 'rolling_mean_7', 'rolling_std_7', 
+    'rolling_max_7', 'model', 'price_band', 'gender', 
+    'income_customer', 'discount'
+]
+
+# ============================================
 # 1. LOAD MODELS & DATA
 # ============================================
 
 def load_all_models():
     """Load all models and data with caching"""
-    
     BASE_DIR = Path.cwd()
     MODELS_DIR = BASE_DIR / 'development' / 'models'
     DATA_DIR = BASE_DIR / 'development' / 'database'
     
-    # Load sales data
-    sales_data = pd.read_parquet(DATA_DIR /  'car_sales_prediction_sales.parquet')
+    sales_data = pd.read_parquet(DATA_DIR / 'car_sales_prediction_sales.parquet')
     
-    # Load computer vision models
     cv_dir = MODELS_DIR / 'computer_vision_2'
     with open(cv_dir / 'brand_mapping.json', 'r') as f:
         brand_mapping = json.load(f)
@@ -52,55 +152,34 @@ def load_all_models():
     with open(cv_dir / 'metadata.json', 'r') as f:
         metadata = json.load(f)
     
-    # Load ALL sales prediction models
     sales_dir = MODELS_DIR / 'sales_prediction'
     
-    # Load scalers
     try:
         sales_scaler = joblib.load(sales_dir / 'scalers' / 'feature_scaler.pkl')
     except Exception:
         sales_scaler = None
     
-    # Load feature columns
     try:
         sales_target_scaler = joblib.load(sales_dir / 'scalers' / 'target_scaler.pkl')
     except Exception:
         sales_target_scaler = None
     
-    # Load all sales models
     sales_models = {}
+    for name, filename in [('XGBoost', 'xgboost.pkl'), ('Random Forest', 'random_forest.pkl'), ('Decision Tree', 'decision_tree.pkl')]:
+        try:
+            sales_models[name] = joblib.load(sales_dir / 'models' / filename)
+        except Exception:
+            sales_models[name] = None
     
-    # XGBoost
     try:
-        sales_models['XGBoost'] = joblib.load(sales_dir / 'models' / 'xgboost.pkl')
-    except:
-        sales_models['XGBoost'] = None
-    
-    # Random Forest
-    try:
-        sales_models['Random Forest'] = joblib.load(sales_dir / 'models' / 'random_forest.pkl')
-    except:
-        sales_models['Random Forest'] = None
-    
-    # Decision Tree
-    try:
-        sales_models['Decision Tree'] = joblib.load(sales_dir / 'models' / 'decision_tree.pkl')
-    except:
-        sales_models['Decision Tree'] = None
-    
-    # CatBoost
-    try:
-        # CatBoost uses .cbm format
         from catboost import CatBoostRegressor
         sales_models['CatBoost'] = CatBoostRegressor()
         sales_models['CatBoost'].load_model(sales_dir / 'models' / 'catboost.cbm')
-    except:
+    except Exception:
         sales_models['CatBoost'] = None
     
-    # Load ALL quantity prediction models
     qty_dir = MODELS_DIR / 'quantity_prediction'
     
-    # Load scalers
     try:
         qty_scaler = joblib.load(qty_dir / 'scalers' / 'feature_scaler.pkl')
     except Exception:
@@ -111,40 +190,26 @@ def load_all_models():
     except Exception:
         qty_target_scaler = None
     
-    # Load feature columns
-    with open(qty_dir / 'parameters' / 'feature_columns.json', 'r') as f:
-        qty_features = json.load(f)
+    try:
+        with open(qty_dir / 'parameters' / 'feature_columns.json', 'r') as f:
+            qty_features = json.load(f)
+    except Exception:
+        qty_features = QTY_MODEL_FEATURES
     
-    # Load all quantity models
     qty_models = {}
-    
-    # XGBoost
-    try:
-        qty_models['XGBoost'] = joblib.load(qty_dir / 'models' / 'xgboost.pkl')
-    except:
-        qty_models['XGBoost'] = None
-    
-    # Random Forest
-    try:
-        qty_models['Random Forest'] = joblib.load(qty_dir / 'models' / 'random_forest.pkl')
-    except:
-        qty_models['Random Forest'] = None
-    
-    # Decision Tree
-    try:
-        qty_models['Decision Tree'] = joblib.load(qty_dir / 'models' / 'decision_tree.pkl')
-    except:
-        qty_models['Decision Tree'] = None
-    
-    # CatBoost
+    for name, filename in [('XGBoost', 'xgboost.pkl'), ('Random Forest', 'random_forest.pkl'), ('Decision Tree', 'decision_tree.pkl')]:
+        try:
+            qty_models[name] = joblib.load(qty_dir / 'models' / filename)
+        except Exception:
+            qty_models[name] = None
+            
     try:
         from catboost import CatBoostRegressor
         qty_models['CatBoost'] = CatBoostRegressor()
         qty_models['CatBoost'].load_model(qty_dir / 'models' / 'catboost.cbm')
-    except:
+    except Exception:
         qty_models['CatBoost'] = None
     
-    # Load model metrics
     sales_metrics = pd.read_csv(sales_dir / 'metrics' / 'model_metrics.csv')
     qty_metrics = pd.read_csv(qty_dir / 'metrics' / 'model_metrics.csv')
     
@@ -158,7 +223,6 @@ def load_all_models():
         'sales_scaler': sales_scaler,
         'sales_target_scaler': sales_target_scaler,
         'sales_models': sales_models,
-        #'sales_features': sales_features,
         'sales_metrics': sales_metrics,
         'qty_scaler': qty_scaler,
         'qty_target_scaler': qty_target_scaler,
@@ -179,8 +243,7 @@ def init_feature_extractor():
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], 
-                           std=[0.229, 0.224, 0.225])
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
     return {
@@ -191,7 +254,6 @@ def init_feature_extractor():
     }
 
 def extract_features(image, extractor):
-    """Extract features from PIL image"""
     device = extractor["device"]
     transform = extractor["transform"]
     feature_extractor = extractor.get("feature_extractor", extractor.get("model"))
@@ -207,8 +269,8 @@ def extract_features(image, extractor):
 def normalize_features(features):
     return features / (np.linalg.norm(features) + 1e-8)
 
-# Load all models and data
-with st.spinner("Loading models and data..."):
+# Load resources
+with st.spinner("🚀 Initializing AI Engine & Neural Weights..."):
     models = load_all_models()
     extractor = init_feature_extractor()
 
@@ -217,107 +279,115 @@ brand_mapping = models['brand_mapping']
 index = models['index']
 feature_data = models['feature_data']
 
-# Filter out None models
 available_sales_models = {k: v for k, v in models['sales_models'].items() if v is not None}
 available_qty_models = {k: v for k, v in models['qty_models'].items() if v is not None}
 
 # ============================================
 # 2. PREDICTION FUNCTIONS
 # ============================================
+
 def prepare_features_for_prediction(brand_info, model_type='sales'):
-    """
-    Prepare features for prediction based on brand info and model type 
-    -> fetched on dataframe also to get comprehensive features
-    """
     avg_price = brand_info.get('avg_price', 0)
+    qty = brand_info.get('total_quantity', 1)
+    profit = brand_info.get('profit_margin', 0.2)
+    
+    input_dict = {
+        'day_of_week': 0,
+        'week_of_year': 1,
+        'season': 1,
+        'cost': float(avg_price),
+        'gross_sales': float(avg_price * qty),
+        'profit': float(profit),
+        'rolling_mean_7': float(qty),
+        'rolling_std_7': 0.0,
+        'rolling_max_7': float(qty),
+        'quantity': float(qty),
+        'model': 0,
+        'price_band': 0
+    }
+    return pd.DataFrame([input_dict])[SCALER_FEATURES]
 
-    # Create feature array based on model type
-    if model_type == 'sales':
-        features = np.array([[
-            avg_price / 1000000,
-            brand_info.get('discount', 0.1),
-            brand_info.get('profit_margin', 0.2),
-            brand_info.get('income_customer', 20000000),
-            brand_info.get('quantity', 1)
-        ]])
-        return features
+def prepare_qty_features_for_prediction(brand_info, sales_data=None):
+    avg_price = brand_info.get('avg_price', 0)
+    qty = brand_info.get('total_quantity', 1)
+    profit = brand_info.get('profit_margin', 0.2)
+    
+    input_dict = {
+        'day_of_week': 0,
+        'week_of_year': 1,
+        'season': 1,
+        'cost': float(avg_price),
+        'gross_sales': float(avg_price * qty),
+        'profit': float(profit),
+        'rolling_mean_7': float(qty),
+        'rolling_std_7': 0.0,
+        'rolling_max_7': float(qty),
+        'model': 0,
+        'price_band': 0,
+        'gender': 0,
+        'income_customer': 0,
+        'discount': 0.0
+    }
+    
+    target_columns = models.get('qty_features', QTY_MODEL_FEATURES)
+    for col in target_columns:
+        if col not in input_dict:
+            input_dict[col] = 0
+            
+    return pd.DataFrame([input_dict])[target_columns]
 
-    else: # model_type == 'quantity':
-        features = np.array([[
-            avg_price / 1000000,
-            brand_info.get('discount', 0.1),
-            brand_info.get('profit_margin', 0.2),
-            brand_info.get('income_customer', 20000000)
-        ]])
-        return features
-
-def predict_with_model(model, features, model_type='sales'):
-    """Predict using the given model and features"""
+def predict_with_model(model, features_df, model_type='sales'):
     try:
-        # Get appropriate scaler
         if model_type == 'sales':
             scaler = models['sales_scaler']
             target_scaler = models['sales_target_scaler']
-        else:  # model_type == 'quantity'
+        else:
             scaler = models['qty_scaler']
             target_scaler = models['qty_target_scaler']
 
-        # Scale features
-        features_scaled = scaler.transform(features)
+        if scaler is not None:
+            scaled_array = scaler.transform(features_df)
+            features_input = pd.DataFrame(scaled_array, columns=features_df.columns)
+        else:
+            features_input = features_df
 
-        # Predict
-        prediction = model.predict(features_scaled)
+        prediction = model.predict(features_input)
 
-        # Inverse transform if target scaler exists
         if target_scaler is not None:
-            prediction = target_scaler.inverse_transform(prediction.reshape(-1, 1))
-            return float(prediction[0][0]) if prediction.ndim > 1 else float(prediction[0])
+            prediction = target_scaler.inverse_transform(np.array(prediction).reshape(-1, 1))
+            return max(0.0, float(prediction[0][0]))
 
-        return float(prediction[0]) if prediction.ndim > 1 else float(prediction)
+        val = float(prediction[0]) if hasattr(prediction, '__len__') else float(prediction)
+        return max(0.0, val)
 
     except Exception as e:
-        st.warning(f"Prediction failed: {e}")
+        st.warning(f"Prediction failed ({model_type}): {e}")
         return None
 
 def predict_all_models(brand_info):
-    """Predict using all available models and return results"""
-    results = {
-        'sales': {},
-        'quantity': {}
-    }
+    results = {'sales': {}, 'quantity': {}}
 
-    # Sales prediction
-    sales_features = prepare_features_for_prediction(brand_info, model_type='sales')
+    sales_features_df = prepare_features_for_prediction(brand_info, model_type='sales')
     for model_name, model in available_sales_models.items():
-        pred = predict_with_model(model, sales_features, model_type='sales')
-        results['sales'][model_name] = pred
+        results['sales'][model_name] = predict_with_model(model, sales_features_df, model_type='sales')
 
-    # Quantity prediction
-    qty_features = prepare_features_for_prediction(brand_info, model_type='quantity')
+    qty_features_df = prepare_qty_features_for_prediction(brand_info)
     for model_name, model in available_qty_models.items():
-        pred = predict_with_model(model, qty_features, model_type='quantity')
-        results['quantity'][model_name] = pred
+        results['quantity'][model_name] = predict_with_model(model, qty_features_df, model_type='quantity')
 
     return results
 
 # ============================================
-# 3. Recommendation Engine
+# 3. RECOMMENDATION ENGINE
 # ============================================
 
 def get_recommendations(image_path, k=5, price_range=None, selected_models=None):
-    """Get car recommendations with sales data"""
-
-    # Load and process image
     image = Image.open(image_path).convert('RGB')
-
-    # Extract features
     query_features = extract_features(image, extractor)
     query_features_norm = normalize_features(query_features).reshape(1, -1).astype(np.float32)
 
-    # Search FAISS
     distances, indices = index.search(query_features_norm, k * 2)
 
-    # Get results with sales data
     results = []
     seen_brands = set()
 
@@ -326,12 +396,9 @@ def get_recommendations(image_path, k=5, price_range=None, selected_models=None)
             brand = feature_data.iloc[idx]['brand']
 
             if brand in seen_brands:
-                continue  # Skip duplicate brands
+                continue
 
-            # Get brand info
             brand_info = brand_mapping.get(brand, {})
-
-            # Get detailed sales info
             brand_sales = sales_data[sales_data['company'].str.contains(brand, case=False, na=False)]
 
             result = {
@@ -347,28 +414,24 @@ def get_recommendations(image_path, k=5, price_range=None, selected_models=None)
                 'models': brand_info.get('models', [])
             }
 
-            # Get model
             if len(brand_sales) > 0:
                 top_model = brand_sales.groupby('model')['quantity'].sum().idxmax()
                 result['top_model'] = top_model
                 result['top_model_qty'] = int(brand_sales[brand_sales['model'] == top_model]['quantity'].sum())
 
-            # Get prediction from all models if sales data exists
             if result['has_sales'] and selected_models:
-                predictions = predict_all_models(brand_info)
-                result['predictions'] = predictions
+                result['predictions'] = predict_all_models(brand_info)
 
-            # Apply price filter
             if price_range:
                 min_price, max_price = price_range
                 if result['avg_price'] and (result['avg_price'] < min_price or result['avg_price'] > max_price):
-                    continue  # Skip if outside price range
+                    continue
 
             results.append(result)
             seen_brands.add(brand)
 
             if len(results) >= k:
-                break  # Stop if we have enough results
+                break
 
     return results
 
@@ -376,409 +439,264 @@ def get_recommendations(image_path, k=5, price_range=None, selected_models=None)
 # 4. UI COMPONENTS
 # ============================================
 
+def render_hero_banner():
+    st.markdown("""
+    <div class="hero-container">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+            <div>
+                <span class="pulse-badge">● AI System Active</span>
+                <h1 style="margin-top: 0.5rem; font-size: 2.2rem; font-weight: 800; color: white;">
+                    <span class="floating-icon">🏎️</span> Car Vision & Sales Intelligence
+                </h1>
+                <p style="color: #94a3b8; font-size: 1.05rem; max-width: 650px;">
+                    Upload any vehicle image to instantly perform <b>Visual Vector Search (ViT + FAISS)</b>, 
+                    retrieve real transactional sales metrics, and generate predictive ML forecasts.
+                </p>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+def render_empty_state_placeholders():
+    st.markdown("### 🌟 Platform Capabilities & Guided Overview")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("""
+        <div class="info-card">
+            <h3>👁️ Visual Search Engine</h3>
+            <p style="color: #94a3b8; font-size: 0.9rem;">
+                Powered by <b>Vision Transformer (ViT-B/16)</b> feature extraction paired with high-dimensional <b>FAISS Indexing</b> for sub-millisecond similarity matching.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    with col2:
+        st.markdown("""
+        <div class="info-card">
+            <h3>📊 Sales Forecasting</h3>
+            <p style="color: #94a3b8; font-size: 0.9rem;">
+                Integrated multi-model forecasting engine combining <b>XGBoost, CatBoost, and Random Forest</b> to project revenue and unit sales.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown("""
+        <div class="info-card">
+            <h3>📈 Market Intelligence</h3>
+            <p style="color: #94a3b8; font-size: 0.9rem;">
+                Gain deep analytical breakdowns of revenue distribution, profit margins, body-style trends, and historical transactions.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.info("👈 **Get Started:** Upload a vehicle image from the sidebar control panel to trigger live predictions!")
+
+def render_dev_overlay(models, brand_info=None):
+    with st.expander("🛠️ DEVELOPER DEBUG PANEL", expanded=True):
+        tab1, tab2, tab3 = st.tabs(["📁 Model Load Status", "🔢 Feature Scaling Inspector", "🖼️ CV Vector Info"])
+
+        with tab1:
+            col_s, col_q = st.columns(2)
+            with col_s:
+                st.markdown("**Sales Models Status**")
+                for k, v in models['sales_models'].items():
+                    st.write(f"• `{k}`: {'✅ Loaded' if v is not None else '❌ Missing/Failed'}")
+                st.write(f"• `Sales Scaler`: {'✅ Loaded' if models['sales_scaler'] is not None else '❌ Missing'}")
+                
+            with col_q:
+                st.markdown("**Quantity Models Status**")
+                for k, v in models['qty_models'].items():
+                    st.write(f"• `{k}`: {'✅ Loaded' if v is not None else '❌ Missing/Failed'}")
+                st.write(f"• `Qty Scaler`: {'✅ Loaded' if models['qty_scaler'] is not None else '❌ Missing'}")
+
+        with tab2:
+            col_sf, col_qf = st.columns(2)
+            dummy_info = brand_info if brand_info else {'avg_price': 250000000, 'total_quantity': 50, 'profit_margin': 0.15}
+            
+            with col_sf:
+                st.markdown("**Sales Features Input**")
+                df_s = prepare_features_for_prediction(dummy_info)
+                st.write(f"Shape: `{df_s.shape}`")
+                st.dataframe(df_s, use_container_width=True)
+                
+            with col_qf:
+                st.markdown("**Quantity Features Input**")
+                df_q = prepare_qty_features_for_prediction(dummy_info)
+                st.write(f"Shape: `{df_q.shape}`")
+                st.dataframe(df_q, use_container_width=True)
+
+        with tab3:
+            st.json({
+                "FAISS Total Vector Index Count": int(models['index'].ntotal),
+                "Feature Matrix Dimension": list(models['feature_matrix'].shape),
+                "Indexed Feature Data Rows": len(models['feature_data']),
+                "Mapped Brand Records": len(models['brand_mapping'])
+            })
+
 def sidebar_controls():
-    """Render sidebar controls with model selection"""
     with st.sidebar:
-        st.title("🏎️ Car Vision")
+        st.title("🏎️ Control Center")
         st.markdown("---")
         
-        # Image upload
         uploaded_file = st.file_uploader(
-            "Upload Car Image",
+            "Upload Vehicle Image",
             type=['jpg', 'jpeg', 'png'],
-            help="Upload a car image to find similar vehicles"
+            help="Select a clear vehicle photo to execute similarity search"
         )
         
         st.markdown("---")
-        
-        # Model Selection
-        st.subheader("🤖 Model Selection")
+        st.subheader("🤖 Model Engines")
         
         col1, col2 = st.columns(2)
-        
         with col1:
-            st.markdown("**Sales Prediction**")
-            sales_model = st.selectbox(
-                "Select Model",
-                options=list(available_sales_models.keys()),
-                index=0,
-                key="sales_model"
-            )
-            
-            # Show model metrics
-            sales_metric = models['sales_metrics'][
-                models['sales_metrics']['Model'] == sales_model
-            ]
+            sales_model = st.selectbox("Sales Model", options=list(available_sales_models.keys()), index=0)
+            sales_metric = models['sales_metrics'][models['sales_metrics']['Model'] == sales_model]
             if not sales_metric.empty:
-                st.caption(f"R²: {sales_metric['R2'].values[0]:.3f} | RMSE: {sales_metric['RMSE'].values[0]:.0f}")
+                st.caption(f"R²: `{sales_metric['R2'].values[0]:.3f}`")
         
         with col2:
-            st.markdown("**Quantity Prediction**")
-            qty_model = st.selectbox(
-                "Select Model",
-                options=list(available_qty_models.keys()),
-                index=0,
-                key="qty_model"
-            )
-            
-            # Show model metrics
-            qty_metric = models['qty_metrics'][
-                models['qty_metrics']['Model'] == qty_model
-            ]
+            qty_model = st.selectbox("Quantity Model", options=list(available_qty_models.keys()), index=0)
+            qty_metric = models['qty_metrics'][models['qty_metrics']['Model'] == qty_model]
             if not qty_metric.empty:
-                st.caption(f"R²: {qty_metric['R2'].values[0]:.3f} | RMSE: {qty_metric['RMSE'].values[0]:.0f}")
+                st.caption(f"R²: `{qty_metric['R2'].values[0]:.3f}`")
         
         st.markdown("---")
+        st.subheader("⚙️ Query Parameters")
         
-        # Controls
-        st.subheader("⚙️ Controls")
+        k_results = st.slider("Max Results (K)", min_value=3, max_value=10, value=5)
         
-        k_results = st.slider(
-            "Number of Results",
-            min_value=3,
-            max_value=10,
-            value=5,
-            help="Select how many similar cars to display"
-        )
-        
-        # Price range filter
-        st.subheader("💰 Price Filter")
-        min_price = st.number_input("Min Price (Rp)", min_value=0, value=0, step=1000000, format="%d")
-        max_price = st.number_input("Max Price (Rp)", min_value=0, value=1000000000, step=1000000, format="%d")
-        
+        min_price = st.number_input("Min Price (IDR)", min_value=0, value=0, step=10000000)
+        max_price = st.number_input("Max Price (IDR)", min_value=0, value=2000000000, step=50000000)
         price_range = (min_price, max_price) if min_price < max_price else None
         
-        # Toggle sales overlay
-        show_sales = st.toggle("📊 Show Sales Data", value=True)
-        
-        # Show model comparison
-        show_comparison = st.toggle("📈 Show Model Comparison", value=False)
+        show_sales = st.toggle("📊 Sales Analytics", value=True)
+        show_comparison = st.toggle("📈 Model Benchmark", value=False)
+        dev_mode = st.toggle("🛠️ Developer Overlay", value=False)
         
         st.markdown("---")
-        st.caption("Built with ❤️ using Vision Transformer + FAISS")
+        st.caption("⚡ Powered by Vision Transformer & FAISS")
         
-        return uploaded_file, k_results, price_range, show_sales, show_comparison, sales_model, qty_model
-
-def display_query_image(image_path):
-    """Display the query image"""
-    image = Image.open(image_path).convert('RGB')
-    st.image(image, caption="🔍 Query Image", use_container_width=True)
+        return uploaded_file, k_results, price_range, show_sales, show_comparison, sales_model, qty_model, dev_mode
 
 def display_metrics(results, sales_data):
-    """Display KPI metrics"""
-    
-    # Calculate metrics
     valid_results = [r for r in results if r['has_sales']]
     
     if valid_results:
         avg_price = np.mean([r['avg_price'] for r in valid_results])
         total_sales = sum([r['total_quantity'] for r in valid_results])
         avg_margin = np.mean([r['profit_margin'] for r in valid_results])
-        
-        # Top revenue brand
         top_brand = max(valid_results, key=lambda x: x['total_sales'])
     else:
-        avg_price = 0
-        total_sales = 0
-        avg_margin = 0
+        avg_price, total_sales, avg_margin = 0, 0, 0
         top_brand = {'brand': 'N/A'}
     
     col1, col2, col3, col4 = st.columns(4)
-    
     with col1:
-        st.metric(
-            "💰 Average Price",
-            f"Rp{avg_price/1_000_000:,.1f}M",
-            help="Mean price across matched recommendations"
-        )
-    
+        st.metric("💰 Avg Market Price", f"Rp {avg_price/1_000_000:,.1f}M")
     with col2:
-        st.metric(
-            "📦 Total Sales",
-            f"{total_sales:,.0f} units",
-            help="Total units sold for recommended brands"
-        )
-    
+        st.metric("📦 Cumulative Sales", f"{total_sales:,.0f} units")
     with col3:
-        st.metric(
-            "📈 Avg Profit Margin",
-            f"{avg_margin*100:.1f}%",
-            help="Average margin from real transaction logs"
-        )
-    
+        st.metric("📈 Profit Margin", f"{avg_margin*100:.1f}%")
     with col4:
-        st.metric(
-            "🏆 Top Revenue Brand",
-            top_brand.get('brand', 'N/A'),
-            help="Highest grossing brand in recommendations"
-        )
-
-def display_model_predictions(result):
-    """Display predictions from selected models"""
-    
-    if 'predictions' not in result:
-        return
-    
-    predictions = result['predictions']
-    
-    st.markdown("**Model Predictions:**")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("📊 Sales Prediction")
-        for model_name, pred in predictions['sales'].items():
-            if pred:
-                st.metric(model_name, f"{pred:,.0f}", delta_color="off")
-    
-    with col2:
-        st.markdown("📦 Quantity Prediction")
-        for model_name, pred in predictions['quantity'].items():
-            if pred:
-                st.metric(model_name, f"{pred:,.0f}", delta_color="off")
+        st.metric("🏆 Top Revenue Brand", top_brand.get('brand', 'N/A'))
 
 def display_recommendation_cards(results, show_sales, selected_sales_model, selected_qty_model):
-    """Display recommendations as image cards with model predictions"""
-    
     cols = st.columns(min(len(results), 4))
     
     for idx, (col, result) in enumerate(zip(cols, results)):
         with col:
-            # Display image
             try:
                 img = Image.open(result['path']).convert('RGB')
                 st.image(img, use_container_width=True)
-            except:
+            except Exception:
                 st.image("https://via.placeholder.com/200x150?text=No+Image", use_container_width=True)
             
-            # Brand name
-            st.markdown(f"**{result['brand']}**")
-            
-            # Similarity score with color
+            st.markdown(f"### {result['brand']}")
             score = result['similarity']
-            color = "green" if score > 0.70 else "orange" if score > 0.50 else "red"
-            st.markdown(f"🟢 Similarity: `{score:.2%}`" if score > 0.70 else 
-                       f"🟠 Similarity: `{score:.2%}`" if score > 0.50 else 
-                       f"🔴 Similarity: `{score:.2%}`")
             
-            # Sales data badges
+            st.markdown(f"🟢 Match Similarity: **{score:.2%}**" if score > 0.70 else 
+                        f"🟠 Match Similarity: **{score:.2%}**" if score > 0.50 else 
+                        f"🔴 Match Similarity: **{score:.2%}**")
+            
             if show_sales and result['has_sales']:
                 if result.get('top_model'):
-                    st.markdown(f"🏷️ **Top Model:** {result['top_model']}")
+                    st.caption(f"🏷️ **Top Model:** {result['top_model']}")
                 
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Sales", f"{result['total_quantity']:,.0f}", delta_color="off")
-                with col2:
-                    st.metric("Price", f"Rp{result['avg_price']/1_000_000:,.0f}M", delta_color="off")
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.metric("Volume", f"{result['total_quantity']:,.0f}")
+                with c2:
+                    st.metric("Price", f"Rp{result['avg_price']/1_000_000:,.0f}M")
                 
-                # Display model predictions
                 if 'predictions' in result:
                     st.markdown("---")
-                    st.markdown("**📊 Predictions**")
-                    
-                    # Sales prediction
                     sales_pred = result['predictions']['sales'].get(selected_sales_model)
-                    if sales_pred:
-                        st.metric(f"Sales ({selected_sales_model})", f"{sales_pred:,.0f}", delta_color="off")
+                    if sales_pred is not None:
+                        st.metric(f"Pred. Sales ({selected_sales_model})", f"{sales_pred:,.0f}")
                     
-                    # Quantity prediction
                     qty_pred = result['predictions']['quantity'].get(selected_qty_model)
-                    if qty_pred:
-                        st.metric(f"Qty ({selected_qty_model})", f"{qty_pred:,.0f}", delta_color="off")
-                
-                # Sales status badge
-                st.markdown("✅ **Sales Data Available**")
+                    if qty_pred is not None:
+                        st.metric(f"Pred. Qty ({selected_qty_model})", f"{qty_pred:,.0f}")
             else:
-                st.caption("⚠️ No sales data available")
-
-def display_model_comparison(results, selected_sales_model, selected_qty_model):
-    """Display model comparison charts"""
-    
-    st.subheader("📊 Model Prediction Comparison")
-    
-    # Filter results with predictions
-    valid_results = [r for r in results if 'predictions' in r and r['has_sales']]
-    
-    if not valid_results:
-        st.info("No prediction data available for comparison")
-        return
-    
-    # Prepare data for comparison
-    brands = [r['brand'] for r in valid_results]
-    
-    # Sales predictions comparison
-    fig1 = go.Figure()
-    
-    for model_name in available_sales_models.keys():
-        predictions = []
-        for r in valid_results:
-            pred = r['predictions']['sales'].get(model_name)
-            predictions.append(pred if pred else 0)
-        
-        fig1.add_trace(go.Bar(
-            name=model_name,
-            x=brands,
-            y=predictions,
-            text=[f"{p:,.0f}" if p else 'N/A' for p in predictions],
-            textposition='auto'
-        ))
-    
-    fig1.update_layout(
-        title="Sales Predictions by Model",
-        xaxis_title="Brand",
-        yaxis_title="Predicted Sales",
-        barmode='group',
-        height=400,
-        template='plotly_white'
-    )
-    
-    st.plotly_chart(fig1, use_container_width=True)
-    
-    # Quantity predictions comparison
-    fig2 = go.Figure()
-    
-    for model_name in available_qty_models.keys():
-        predictions = []
-        for r in valid_results:
-            pred = r['predictions']['quantity'].get(model_name)
-            predictions.append(pred if pred else 0)
-        
-        fig2.add_trace(go.Bar(
-            name=model_name,
-            x=brands,
-            y=predictions,
-            text=[f"{p:,.0f}" if p else 'N/A' for p in predictions],
-            textposition='auto'
-        ))
-    
-    fig2.update_layout(
-        title="Quantity Predictions by Model",
-        xaxis_title="Brand",
-        yaxis_title="Predicted Quantity",
-        barmode='group',
-        height=400,
-        template='plotly_white'
-    )
-    
-    st.plotly_chart(fig2, use_container_width=True)
-    
-    # Model metrics comparison
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Sales Model Metrics")
-        st.dataframe(models['sales_metrics'][['Model', 'R2', 'RMSE', 'MAE']], use_container_width=True)
-    
-    with col2:
-        st.subheader("Quantity Model Metrics")
-        st.dataframe(models['qty_metrics'][['Model', 'R2', 'RMSE', 'MAE']], use_container_width=True)
+                st.caption("⚠️ No transactional records available")
 
 def display_analytics_charts(results, sales_data, selected_sales_model):
-    # Fixed specs: Set secondary_y: True for row 2, col 1 and domain for row 2, col 2
     fig = make_subplots(
-        rows=2, 
-        cols=2,
+        rows=2, cols=2,
         subplot_titles=(
-            "Similarity vs Price", 
-            "Actual vs Predicted Sales", 
-            "Profit Margin & Volume", 
-            "Transaction Distribution"
+            "Similarity vs Price Index", 
+            "Actual vs Predicted Volume", 
+            "Profit Margin vs Volume", 
+            "Market Share Breakdown"
         ),
-        specs=[
-            [{"type": "xy"}, {"type": "xy"}],
-            [{"type": "xy", "secondary_y": True}, {"type": "domain"}]
-        ]
+        specs=[[{"type": "xy"}, {"type": "xy"}], [{"type": "xy", "secondary_y": True}, {"type": "domain"}]]
     )
     
-    # Filter valid results
     valid_results = [r for r in results if r['has_sales']]
     
     if valid_results:
-        # 1. Similarity vs Price (Row 1, Col 1)
         brands = [r['brand'] for r in valid_results]
         similarities = [r['similarity'] for r in valid_results]
         prices = [r['avg_price'] / 1_000_000 for r in valid_results]
         
         fig.add_trace(
             go.Scatter(
-                x=prices,
-                y=similarities,
-                mode='markers+text',
-                text=brands,
-                textposition="top center",
-                marker=dict(size=15, color=similarities, colorscale='Viridis'),
-                name='Similarity vs Price'
+                x=prices, y=similarities, mode='markers+text',
+                text=brands, textposition="top center",
+                marker=dict(size=14, color=similarities, colorscale='Plasma')
             ),
             row=1, col=1
         )
         
-        # 2. Actual vs Predicted (Row 1, Col 2)
         actual_sales = [r['total_quantity'] for r in valid_results]
-        predicted_sales = []
-        for r in valid_results:
-            if 'predictions' in r:
-                pred = r['predictions']['sales'].get(selected_sales_model)
-                predicted_sales.append(pred if pred else 0)
-            else:
-                predicted_sales.append(0)
+        predicted_sales = [
+            r['predictions']['sales'].get(selected_sales_model, 0) if 'predictions' in r else 0 
+            for r in valid_results
+        ]
         
-        fig.add_trace(
-            go.Bar(x=brands, y=actual_sales, name='Actual Sales', marker_color='lightcoral'),
-            row=1, col=2
-        )
-        fig.add_trace(
-            go.Bar(x=brands, y=predicted_sales, name=f'Predicted ({selected_sales_model})', marker_color='lightblue'),
-            row=1, col=2
-        )
+        fig.add_trace(go.Bar(x=brands, y=actual_sales, name='Actual Sales', marker_color='#6366f1'), row=1, col=2)
+        fig.add_trace(go.Bar(x=brands, y=predicted_sales, name=f'Pred. ({selected_sales_model})', marker_color='#38bdf8'), row=1, col=2)
         
-        # 3. Profit Margin & Sales Volume (Row 2, Col 1)
         margins = [r['profit_margin'] * 100 for r in valid_results]
         volumes = [r['total_quantity'] for r in valid_results]
         
-        # Add primary trace (Profit Margin %)
         fig.add_trace(
-            go.Scatter(
-                x=brands,
-                y=margins,
-                mode='lines+markers',
-                name='Profit Margin %',
-                marker=dict(size=10),
-                line=dict(color='green')
-            ),
+            go.Scatter(x=brands, y=margins, mode='lines+markers', name='Margin %', marker=dict(size=8), line=dict(color='#10b981')),
             row=2, col=1, secondary_y=False
         )
-        
-        # Add secondary trace (Sales Volume)
         fig.add_trace(
-            go.Bar(
-                x=brands,
-                y=volumes,
-                name='Sales Volume',
-                marker_color='orange'
-            ),
+            go.Bar(x=brands, y=volumes, name='Sales Volume', marker_color='#f59e0b', opacity=0.4),
             row=2, col=1, secondary_y=True
         )
         
-        # 4. Transaction distribution (Row 2, Col 2 - Pie Chart)
         transactions = [r['transaction_count'] for r in valid_results]
-        
-        fig.add_trace(
-            go.Pie(
-                labels=brands,
-                values=transactions,
-                name='Transaction Distribution'
-            ),
-            row=2, col=2
-        )
+        fig.add_trace(go.Pie(labels=brands, values=transactions, hole=0.4), row=2, col=2)
     
-    # Update layout
-    fig.update_layout(
-        height=600,
-        showlegend=True,
-        template='plotly_white'
-    )
-    
+    fig.update_layout(height=650, template='plotly_dark', showlegend=True, margin=dict(l=20, r=20, t=40, b=20))
     st.plotly_chart(fig, use_container_width=True)
 
 def display_transaction_data(results, sales_data, selected_sales_model, selected_qty_model):
@@ -844,92 +762,53 @@ def display_transaction_data(results, sales_data, selected_sales_model, selected
     st.dataframe(df, use_container_width=True, hide_index=True)
 
 # ============================================
-# 5. MAIN APP
+# 5. MAIN APP ENTRY
 # ============================================
 
 def main():
-    # Sidebar
-    uploaded_file, k_results, price_range, show_sales, show_comparison, selected_sales_model, selected_qty_model = sidebar_controls()
+    uploaded_file, k_results, price_range, show_sales, show_comparison, selected_sales_model, selected_qty_model, dev_mode = sidebar_controls()
     
-    # Main content
-    st.title("🚗 Car Vision & Sales Intelligence Dashboard")
-    st.markdown("---")
+    render_hero_banner()
+    
+    if dev_mode:
+        render_dev_overlay(models)
+        st.markdown("---")
     
     if uploaded_file is not None:
-        # Save uploaded file
         with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
             tmp.write(uploaded_file.getvalue())
             temp_path = tmp.name
         
-        # Get recommendations
-        with st.spinner("🔍 Finding similar cars..."):
-            results = get_recommendations(
-                temp_path, 
-                k=k_results, 
-                price_range=price_range,
-                selected_models=True
-            )
+        with st.spinner("⚡ Executing Vision Search & Forecast Engine..."):
+            results = get_recommendations(temp_path, k=k_results, price_range=price_range, selected_models=True)
         
         if results:
-            # Display query image and metrics
+            if dev_mode:
+                render_dev_overlay(models, brand_info=results[0])
+                st.markdown("---")
+
             col1, col2 = st.columns([1, 3])
-            
             with col1:
-                display_query_image(temp_path)
-            
+                st.image(Image.open(temp_path).convert('RGB'), caption="🔍 Query Vehicle", use_container_width=True)
             with col2:
-                st.subheader("📊 Key Metrics")
+                st.subheader("📊 Analytics Summary")
                 display_metrics(results, sales_data)
             
             st.markdown("---")
-            
-            # Display recommendation cards
-            st.subheader("🖼️ Top Recommendations")
+            st.subheader("🏎️ Top Matching Vehicles")
             display_recommendation_cards(results, show_sales, selected_sales_model, selected_qty_model)
             
             st.markdown("---")
-            
-            # Display model comparison if enabled
-            if show_comparison:
-                display_model_comparison(results, selected_sales_model, selected_qty_model)
-                st.markdown("---")
-            
-            # Display analytics
             if show_sales:
+                st.subheader("📈 Intelligence Analytics & Market Trends")
                 display_analytics_charts(results, sales_data, selected_sales_model)
-                st.markdown("---")
-                display_transaction_data(results, sales_data, selected_sales_model, selected_qty_model)
+
+            st.markdown("---")
+            display_transaction_data(results, sales_data, selected_sales_model, selected_qty_model)
         else:
-            st.warning("No recommendations found. Try adjusting the filters.")
-        
-        # Cleanup
-        os.unlink(temp_path)
-        
+            st.warning("No matching vehicle records found matching the configured price range.")
     else:
-        # Welcome screen
-        st.info("👈 Please upload a car image from the sidebar to get started!")
-        
-        # Show model information
-        with st.expander("📊 Model Information"):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.subheader("Sales Prediction Models")
-                st.dataframe(models['sales_metrics'][['Model', 'R2', 'RMSE', 'MAE']], use_container_width=True)
-            
-            with col2:
-                st.subheader("Quantity Prediction Models")
-                st.dataframe(models['qty_metrics'][['Model', 'R2', 'RMSE', 'MAE']], use_container_width=True)
-        
-        # Show sample data preview
-        with st.expander("📊 Preview Sales Data"):
-            st.dataframe(sales_data.head(10), use_container_width=True)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Total Records", f"{len(sales_data):,}")
-            with col2:
-                st.metric("Total Sales", f"Rp{sales_data['sales'].sum():,.0f}")
+        render_empty_state_placeholders()
 
 if __name__ == "__main__":
     main()
