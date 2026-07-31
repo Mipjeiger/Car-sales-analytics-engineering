@@ -1,6 +1,5 @@
 services:
   
-  # PostgreSQL Database
   postgres:
     image: postgres:18-alpine
     container_name: postgres_car_analytics
@@ -20,7 +19,6 @@ services:
     networks:
       - car_analytics_network
 
-  # Metabase
   metabase:
     image: metabase/metabase:latest
     container_name: metabase
@@ -44,8 +42,63 @@ services:
     networks:
       - car_analytics_network
 
+  minio:
+    image: minio/minio:latest
+    container_name: minio_car_analytics
+    ports:
+      - "9000:9000" # S3 API Port
+      - "9001:9000" # Web console Port
+    environment:
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    restart: unless-stopped
+    networks:
+      - car_analytics_network
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: development/docker/Dockerfile.mlflow
+    container_name: mlflow_car_analytics
+    ports:
+      - "5003:5000"
+    environment:
+      - BACKEND_STORE_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - ARTIFACT_ROOT=s3://mlflow-artifacts/
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    volumes:
+      - ./development/mlflow:/mlflow
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - car_analytics_network
+
+  dvc:
+    build:
+      context: .
+      dockerfile: development/docker/Dockerfile.dvc
+    container_name: dvc_car_analytics
+    volumes:
+      - .:/app
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    networks:
+      - car_analytics_network
+    command: dvc pull # Runs 'dvc pull' on start and exits
+
 volumes:
   metabase-data:
+  minio-data:
 
 networks:
   car_analytics_network:
