@@ -1,0 +1,22 @@
+{
+  "num_images": 700,
+  "feature_dimension": 768,
+  "brands": [
+    "Tata_Safari",
+    "Mahindra_Scorpio",
+    "Toyota_Innova",
+    "Audi",
+    "Swift",
+    "Rolls_Royce",
+    "Hyundai_Creta"
+  ],
+  "brand_counts": {
+    "Tata_Safari": 100,
+    "Mahindra_Scorpio": 100,
+    "Toyota_Innova": 100,
+    "Audi": 100,
+    "Swift": 100,
+    "Rolls_Royce": 100,
+    "Hyundai_Creta": 100
+  }
+}

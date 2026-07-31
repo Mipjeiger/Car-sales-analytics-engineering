@@ -1,0 +1,61 @@
+{
+  "Tata_Safari": {
+    "sales_brand": null,
+    "has_sales_data": false,
+    "models_sales": [],
+    "models_quantity": [],
+    "avg_price": null,
+    "total_quantity": null
+  },
+  "Mahindra_Scorpio": {
+    "sales_brand": null,
+    "has_sales_data": false,
+    "models_sales": [],
+    "models_quantity": [],
+    "avg_price": null,
+    "total_quantity": null
+  },
+  "Toyota_Innova": {
+    "sales_brand": null,
+    "has_sales_data": false,
+    "models_sales": [],
+    "models_quantity": [],
+    "avg_price": null,
+    "total_quantity": null
+  },
+  "Audi": {
+    "sales_brand": "Audi",
+    "has_sales_data": true,
+    "models_sales": [
+      "A4",
+      "A6",
+      "A8"
+    ],
+    "avg_price": 411103712.8632479,
+    "total_quantity": 1043
+  },
+  "Swift": {
+    "sales_brand": null,
+    "has_sales_data": false,
+    "models_sales": [],
+    "models_quantity": [],
+    "avg_price": null,
+    "total_quantity": null
+  },
+  "Rolls_Royce": {
+    "sales_brand": null,
+    "has_sales_data": false,
+    "models_sales": [],
+    "models_quantity": [],
+    "avg_price": null,
+    "total_quantity": null
+  },
+  "Hyundai_Creta": {
+    "sales_brand": null,
+    "has_sales_data": false,
+    "models_sales": [],
+    "models_quantity": [],
+    "avg_price": null,
+    "total_quantity": null
+  }
+}

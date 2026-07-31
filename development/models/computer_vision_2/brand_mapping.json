@@ -1,0 +1,142 @@
+{
+  "Tata_Safari": {
+    "sales_brand": "Toyota",
+    "mapped_query": "Toyota",
+    "has_sales": true,
+    "models": [
+      "Celica",
+      "Corolla",
+      "Land Cruiser",
+      "4Runner",
+      "Tacoma",
+      "Sienna",
+      "RAV4",
+      "Camry",
+      "Avalon"
+    ],
+    "avg_price": 530941041.7657658,
+    "total_quantity": 2620,
+    "total_sales": 1228274459132.7,
+    "total_profit": 146160720219.68,
+    "profit_margin": 9.687594594594595,
+    "transaction_count": 1110,
+    "body_styles": [
+      "SUV",
+      "Passenger",
+      "Sedan",
+      "Hardtop",
+      "Hatchback"
+    ]
+  },
+  "Mahindra_Scorpio": {
+    "sales_brand": null,
+    "mapped_query": "Mahindra",
+    "has_sales": false,
+    "models": [],
+    "avg_price": null,
+    "total_quantity": 0,
+    "total_sales": 0.0,
+    "total_profit": 0.0,
+    "profit_margin": 0.0,
+    "transaction_count": 0,
+    "body_styles": []
+  },
+  "Toyota_Innova": {
+    "sales_brand": "Toyota",
+    "mapped_query": "Toyota",
+    "has_sales": true,
+    "models": [
+      "Celica",
+      "Corolla",
+      "Land Cruiser",
+      "4Runner",
+      "Tacoma",
+      "Sienna",
+      "RAV4",
+      "Camry",
+      "Avalon"
+    ],
+    "avg_price": 530941041.7657658,
+    "total_quantity": 2620,
+    "total_sales": 1228274459132.7,
+    "total_profit": 146160720219.68,
+    "profit_margin": 9.687594594594595,
+    "transaction_count": 1110,
+    "body_styles": [
+      "SUV",
+      "Passenger",
+      "Sedan",
+      "Hardtop",
+      "Hatchback"
+    ]
+  },
+  "Audi": {
+    "sales_brand": "Audi",
+    "mapped_query": "Audi",
+    "has_sales": true,
+    "models": [
+      "A4",
+      "A6",
+      "A8"
+    ],
+    "avg_price": 411103712.8632479,
+    "total_quantity": 1043,
+    "total_sales": 382670165469.9,
+    "total_profit": 54297404181.23,
+    "profit_margin": 11.904487179487178,
+    "transaction_count": 468,
+    "body_styles": [
+      "Hardtop",
+      "SUV",
+      "Passenger",
+      "Hatchback"
+    ]
+  },
+  "Swift": {
+    "sales_brand": null,
+    "mapped_query": "Maruti",
+    "has_sales": false,
+    "models": [],
+    "avg_price": null,
+    "total_quantity": 0,
+    "total_sales": 0.0,
+    "total_profit": 0.0,
+    "profit_margin": 0.0,
+    "transaction_count": 0,
+    "body_styles": []
+  },
+  "Rolls_Royce": {
+    "sales_brand": null,
+    "mapped_query": "Rolls",
+    "has_sales": false,
+    "models": [],
+    "avg_price": null,
+    "total_quantity": 0,
+    "total_sales": 0.0,
+    "total_profit": 0.0,
+    "profit_margin": 0.0,
+    "transaction_count": 0,
+    "body_styles": []
+  },
+  "Hyundai_Creta": {
+    "sales_brand": "Hyundai",
+    "mapped_query": "Hyundai",
+    "has_sales": true,
+    "models": [
+      "Accent",
+      "Sonata",
+      "Elantra"
+    ],
+    "avg_price": 348758364.92424244,
+    "total_quantity": 591,
+    "total_sales": 186053177447.9,
+    "total_profit": 24569776278.98,
+    "profit_margin": 9.377954545454545,
+    "transaction_count": 264,
+    "body_styles": [
+      "Hatchback",
+      "SUV",
+      "Sedan"
+    ]
+  }
+}
