@@ -1,0 +1,24 @@
+# DVC Pipeline Configuration with MinIO
+stages:
+  load_mlflow_models:
+    cmd: python ../pipeline/stages/load_models.py
+    deps:
+      - ../mlflow/mlflow.db
+      - ../models/sales_prediction/models/
+      - ../models/quantity_prediction/models/
+      - ../models/computer_vision_2/
+    outs:
+      - data/
+    remote: minio
+    frozen: false
+  
+  evaluate_models:
+    cmd: python ../pipeline/stages/evaluate.py
+    deps:
+      - data/
+    outs:
+      - metrics/evaluation.json
+    metrics:
+      - metrics/evaluation.json:
+          cache: false
+    remote: minio
