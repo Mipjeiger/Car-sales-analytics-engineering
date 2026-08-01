@@ -1,5 +1,5 @@
 """
-Load existing models from development/models into MLflow
+Load existing models from development/models into MLflow using .env configuration
 """
 
 import os
@@ -10,18 +10,38 @@ import mlflow.sklearn
 import pandas as pd
 from pathlib import Path
 from tqdm import tqdm
+from dotenv import load_dotenv
+
 
 class MLflowModelLoader:
     def __init__(self):
-        # Resolve path dynamically relative to this script
-        self.SCRIPT_DIR = Path(__file__).resolve().parent
-        self.BASE_DIR = self.SCRIPT_DIR.parent
-        self.MODELS_DIR = self.BASE_DIR / "models"
-        self.MLFLOW_DIR = self.BASE_DIR / "mlflow"
+        # Resolve directory hierarchy dynamically relative to this script
+        # Script location: development/mlflow/load_existing_models.py
+        self.SCRIPT_DIR = Path(__file__).resolve().parent  # development/mlflow
+        self.DEV_DIR = self.SCRIPT_DIR.parent               # development
+        self.BASE_DIR = self.DEV_DIR.parent                # project root (Car_Sales)
+        
+        self.MODELS_DIR = self.DEV_DIR / "models"
+        if not self.MODELS_DIR.exists():
+            self.MODELS_DIR = self.BASE_DIR / "models"  # Fallback to project root models dir
 
+        self.MLFLOW_DIR = self.DEV_DIR / "mlflow"
         self.MLFLOW_DIR.mkdir(exist_ok=True)
 
-        # Smart URI fallback: Uses MLFLOW_TRACKING_URI or defaults to localhost if run outside Docker
+        # Load environment variables from development/.env
+        env_path = self.DEV_DIR / ".env"
+        if env_path.exists():
+            load_dotenv(dotenv_path=env_path)
+            print(f"🔑 Loaded environment variables from: {env_path}")
+        else:
+            print(f"⚠️ Warning: .env file not found at {env_path}. Using environment/default fallbacks.")
+
+        # Set S3 / MinIO environment variables for MLflow artifact logging
+        os.environ["AWS_ACCESS_KEY_ID"] = os.getenv("AWS_ACCESS_KEY_ID", "minioadmin")
+        os.environ["AWS_SECRET_ACCESS_KEY"] = os.getenv("AWS_SECRET_ACCESS_KEY", "minioadmin")
+        os.environ["MLFLOW_S3_ENDPOINT_URL"] = os.getenv("MLFLOW_S3_ENDPOINT_URL", "http://localhost:9000")
+
+        # Set Tracking URI from .env or fallback
         tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5003")
         mlflow.set_tracking_uri(tracking_uri)
         print(f"📡 Connected to MLflow Tracking Server at: {tracking_uri}")
@@ -56,7 +76,7 @@ class MLflowModelLoader:
                 continue
 
             try:
-                with mlflow.start_run(run_name=f"sales_{model_name}"):
+                with mlflow.start_run(run_name=f"{model_name}") as run:
                     if model_name == "CatBoost":
                         from catboost import CatBoostRegressor
                         model = CatBoostRegressor()
@@ -64,7 +84,13 @@ class MLflowModelLoader:
                     else:
                         model = joblib.load(model_path)
 
-                    mlflow.sklearn.log_model(model, f"sales_{model_name}")
+                    artifact_subpath = f"sales_{model_name.lower().replace(' ', '_')}"
+
+                    if model_name in ["Random Forest", "Decision Tree", "XGBoost"]:
+                        mlflow.sklearn.log_model(model, artifact_path=artifact_subpath)
+                    else:
+                        mlflow.log_artifact(str(model_path), artifact_path=artifact_subpath)
+
                     mlflow.log_metrics({
                         "R2": float(row.get("R2", 0)),
                         "RMSE": float(row.get("RMSE", 0)),
@@ -76,10 +102,13 @@ class MLflowModelLoader:
                         with open(params_file, "r") as f:
                             mlflow.log_params(json.load(f))
 
-                    mlflow.register_model(
-                        f"runs:/{mlflow.active_run().info.run_id}/sales_{model_name}",
-                        f"SalesPredictor_{model_name}",
-                    )
+                    try:
+                        mlflow.register_model(
+                            f"runs:/{run.info.run_id}/{artifact_subpath}",
+                            f"SalesPredictor_{model_name.replace(' ', '_')}",
+                        )
+                    except Exception as reg_err:
+                        print(f"\n⚠️ Registration skipped for {model_name}: {reg_err}")
 
             except Exception as e:
                 print(f"\n❌ Failed to load {model_name}: {e}")
@@ -114,7 +143,7 @@ class MLflowModelLoader:
                 continue
 
             try:
-                with mlflow.start_run(run_name=f"quantity_{model_name}"):
+                with mlflow.start_run(run_name=f"quantity_{model_name}") as run:
                     if model_name == "CatBoost":
                         from catboost import CatBoostRegressor
                         model = CatBoostRegressor()
@@ -122,7 +151,13 @@ class MLflowModelLoader:
                     else:
                         model = joblib.load(model_path)
 
-                    mlflow.sklearn.log_model(model, f"quantity_{model_name}")
+                    artifact_subpath = f"quantity_{model_name.lower().replace(' ', '_')}"
+
+                    if model_name in ["Random Forest", "Decision Tree", "XGBoost"]:
+                        mlflow.sklearn.log_model(model, artifact_path=artifact_subpath)
+                    else:
+                        mlflow.log_artifact(str(model_path), artifact_path=artifact_subpath)
+
                     mlflow.log_metrics({
                         "R2": float(row.get("R2", 0)),
                         "RMSE": float(row.get("RMSE", 0)),
@@ -134,10 +169,13 @@ class MLflowModelLoader:
                         with open(params_file, "r") as f:
                             mlflow.log_params(json.load(f))
 
-                    mlflow.register_model(
-                        f"runs:/{mlflow.active_run().info.run_id}/quantity_{model_name}",
-                        f"QuantityPredictor_{model_name}",
-                    )
+                    try:
+                        mlflow.register_model(
+                            f"runs:/{run.info.run_id}/{artifact_subpath}",
+                            f"QuantityPredictor_{model_name.replace(' ', '_')}",
+                        )
+                    except Exception as reg_err:
+                        print(f"\n⚠️ Registration skipped for {model_name}: {reg_err}")
 
             except Exception as e:
                 print(f"\n❌ Failed to load {model_name}: {e}")
@@ -145,8 +183,11 @@ class MLflowModelLoader:
     def load_cv_models(self):
         """Load computer vision models"""
         cv_dir = self.MODELS_DIR / "computer_vision_2"
+        print(f"\nLoaded CV models from: {cv_dir}")
+
         if not cv_dir.exists():
             cv_dir = self.MODELS_DIR / "computer_vision"
+            print(f"Fallback CV models directory: {cv_dir}")
 
         if not cv_dir.exists():
             print("⚠️ Computer vision directory not found")
@@ -173,11 +214,7 @@ class MLflowModelLoader:
                     if file_path.exists():
                         mlflow.log_artifact(str(file_path))
 
-                mlflow.register_model(
-                    f"runs:/{mlflow.active_run().info.run_id}",
-                    "ComputerVision_FAISS",
-                )
-                print("✅ Computer Vision model registered!")
+                print("✅ Computer Vision artifacts logged successfully!")
 
         except Exception as e:
             print(f"❌ Failed to load CV models: {e}")
@@ -193,7 +230,8 @@ class MLflowModelLoader:
 
         print("\n" + "=" * 50)
         print("✅ All models successfully loaded to MLflow!")
-        print("📊 MLflow UI: http://localhost:5003")
+        tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5003")
+        print(f"📊 MLflow UI: {tracking_uri}")
 
 
 if __name__ == "__main__":

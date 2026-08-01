@@ -1,4 +1,44 @@
-*.pkl filter=lfs diff=lfs merge=lfs -text
-*.jpg filter=lfs diff=lfs merge=lfs -text
+# ============================================================
+# Git Attributes & LFS Rules for MLOps Pipeline
+# ============================================================
+
+# Auto-detect text files and enforce universal LF line endings
+* text=auto eol=lf
+
+# ------------------------------------------------------------
+# Code, Configurations & DVC Tracked Metadata (Plain Text)
+# ------------------------------------------------------------
+*.py text
+*.sh text eol=lf
+*.yaml text
+*.yml text
+*.json text
+*.env* text
+*.md text
+*.txt text
+dvc.yaml text
+dvc.lock text
+MLmodel text
+
+# ------------------------------------------------------------
+# Large Binary Models & ML Artifacts (Tracked via Git LFS / DVC)
+# ------------------------------------------------------------
+# CatBoost binary models
 *.cbm filter=lfs diff=lfs merge=lfs -text
+
+# Pickle / Compressed Model Weights
+*.pkl filter=lfs diff=lfs merge=lfs -text
+*.joblib filter=lfs diff=lfs merge=lfs -text
+*.bin filter=lfs diff=lfs merge=lfs -text
+*.pth filter=lfs diff=lfs merge=lfs -text
+*.onnx filter=lfs diff=lfs merge=lfs -text
+*.h5 filter=lfs diff=lfs merge=lfs -text
+
+# Image Formats (For future plots in ./plot)
+*.png filter=lfs diff=lfs merge=lfs -text
+*.jpg filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+
+# Data Formats
 *.csv filter=lfs diff=lfs merge=lfs -text
+*.parquet filter=lfs diff=lfs merge=lfs -text

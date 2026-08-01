@@ -1,0 +1,9 @@
+{
+  "best_model": {
+    "name": "quantity_XGBoost",
+    "r2": 0.9976797834813224,
+    "rmse": 2.1067091677183214,
+    "run_id": "c78eb099acb04e9386870d966c12fc5e"
+  },
+  "total_runs": 9
+}

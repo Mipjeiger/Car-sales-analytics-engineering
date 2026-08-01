@@ -2,19 +2,27 @@
 Serve models from MLflow
 """
 
+import os
 import mlflow
+import mlflow.pyfunc
 import json
-import numpy as np
-import pandas as pd
 from pathlib import Path
+from dotenv import load_dotenv
 
 class MLflowModelServing:
     def __init__(self):
-        self.BASE_DIR = Path.cwd()
-        self.MLFLOW_DIR = self.BASE_DIR / 'development' / 'mlflow'
-        
-        mlflow.set_tracking_uri("http://mlflow:5000")
-        self.load_models()
+        self.BASE_DIR = Path.cwd().resolve().parent
+        self.DEV_DIR = self.BASE_DIR.parent # development
+
+        # Load environment variables
+        env_path = self.DEV_DIR / ".env"
+        if env_path.exists():
+            load_dotenv(dotenv_path=env_path)
+
+        # Set tracking URI dynamically
+        tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5003")
+        mlflow.set_tracking_uri(tracking_uri)
+        print(f"📡 Connected to MLflow Tracking Server at: {tracking_uri}")
     
     def load_models(self):
         """Load models from MLflow registry"""
@@ -24,35 +32,51 @@ class MLflowModelServing:
         registered_models = client.search_registered_models()
         
         for model in registered_models:
+            # Get all versions for the model regardless of stage
+            versions = client.search_model_versions(f"name='{model.name}'")
+            if not versions:
+                continue
+
+            # Retrieve the latest numerical version
+            latest_version_obj = max(versions, key=lambda v: int(v.version))
+            latest_version = latest_version_obj.version
+            model_uri = f"models:/{model.name}/{latest_version}"
+
+            # Safely attempt to load model object using MLFlow pyfunc
+            try:
+                loaded_model = mlflow.pyfunc.load_model(model_uri)
+            except Exception:
+                loaded_model = None
+
+            # Ensure all models witin self.models
             if 'SalesPredictor' in model.name:
-                latest = client.get_latest_versions(model.name, stages=["Production"])
-                if latest:
-                    model_key = model.name.replace('SalesPredictor_', '')
-                    self.models['sales'][model_key] = {
-                        'model': mlflow.sklearn.load_model(f"models:/{model.name}/Production"),
-                        'version': latest[0].version
-                    }
+                model_key = model.name.replace('SalesPredictor_', '')
+                self.models['sales'][model_key] = {
+                    'model': loaded_model,
+                    'version': latest_version
+                }
             elif 'QuantityPredictor' in model.name:
-                latest = client.get_latest_versions(model.name, stages=["Production"])
-                if latest:
-                    model_key = model.name.replace('QuantityPredictor_', '')
-                    self.models['quantity'][model_key] = {
-                        'model': mlflow.sklearn.load_model(f"models:/{model.name}/Production"),
-                        'version': latest[0].version
-                    }
-            elif 'ComputerVision' in model.name:
-                self.models['cv'] = {'version': '1'}
-        
+                model_key = model.name.replace('QuantityPredictor_', '')
+                self.models['quantity'][model_key] = {
+                    'model': loaded_model,
+                    'version': latest_version
+                }
+            elif 'ComputerVisionModel' in model.name:
+                self.models['cv'] = {'version': latest_version}
+
         print(f"✅ Loaded {len(self.models['sales'])} sales models")
         print(f"✅ Loaded {len(self.models['quantity'])} quantity models")
+        print(f"✅ Loaded {len(self.models['cv'])} computer vision models")
     
     def predict_sales(self, features, model_name='XGBoost'):
-        if model_name not in self.models['sales']:
+        """Predict sales using the specified model"""
+        if model_name not in self.models['sales'] or not self.models['sales'][model_name]['model']:
             raise ValueError(f"Model {model_name} not found")
         return self.models['sales'][model_name]['model'].predict(features)
     
     def predict_quantity(self, features, model_name='XGBoost'):
-        if model_name not in self.models['quantity']:
+        """Predict quantity using the specified model"""
+        if model_name not in self.models['quantity'] or not self.models['quantity'][model_name]['model']:
             raise ValueError(f"Model {model_name} not found")
         return self.models['quantity'][model_name]['model'].predict(features)
     

@@ -1,0 +1,12 @@
+cmd: DVC_DIR=. python3 ../pipeline/stages/evaluate.py
+deps:
+- path: data/
+  hash: md5
+  md5: 8a3ddec60a82b8ad0400ab89edc94a19.dir
+  size: 95250419
+  nfiles: 32
+outs:
+- path: metrics/evaluation.json
+  hash: md5
+  md5: bcf1585ed714bc3ce8d47443c3152bca
+  size: 187

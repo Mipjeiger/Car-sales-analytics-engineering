@@ -1,0 +1,14 @@
+{
+  "models/sales_prediction/models": {
+    "exists": true,
+    "type": "dir"
+  },
+  "models/quantity_prediction/models": {
+    "exists": true,
+    "type": "dir"
+  },
+  "models/computer_vision_2": {
+    "exists": true,
+    "type": "dir"
+  }
+}

@@ -3,41 +3,65 @@ Evaluate models and save metrics for DVC with MinIO
 """
 
 import json
+from dotenv import load_dotenv
 import pandas as pd
 import mlflow
+import os
 import boto3
 from pathlib import Path
-from botocore.client import Config
 
 def evaluate_models():
-    BASE_DIR = Path.cwd()
-    DVC_METRICS = BASE_DIR / 'development' / 'dvc' / 'metrics'
+    SCRIPT_DIR = Path(__file__).resolve().parent    # development/pipeline/stages
+    DEV_DIR = SCRIPT_DIR.parents[1]                 # development
+    DVC_METRICS = DEV_DIR / 'dvc' / 'metrics'
     DVC_METRICS.mkdir(parents=True, exist_ok=True)
+
+    # Load environment variables from development/.env
+    env_path = DEV_DIR / '.env'
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path)
     
     # Setup MLflow
-    mlflow.set_tracking_uri("http://mlflow:5000")
-    
-    experiment = mlflow.get_experiment_by_name('car_sales_training')
+    tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5003")
+    mlflow.set_tracking_uri(tracking_uri)
+    print(f"📡 Connected to MLflow Tracking Server at: {tracking_uri}")
+
     metrics = {'total_runs': 0}
     
-    if experiment:
-        runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id])
+    try:
+        runs = mlflow.search_runs(search_all_experiments=True)
+
         if not runs.empty:
-            best_idx = runs['metrics.r2_score'].idxmax()
-            best = runs.loc[best_idx]
-            
-            metrics = {
-                'best_model': {
-                    'name': best.get('tags.mlflow.runName', 'Unknown'),
-                    'r2': float(best.get('metrics.r2_score', 0)),
-                    'rmse': float(best.get('metrics.rmse', 0)),
-                    'run_id': best.get('run_id', '')
-                },
-                'total_runs': len(runs)
-            }
+            r2_col = next((col for col in ['metrics.R2', 'metrics.r2_score', 'metrics.r2'] if col in runs.columns), None)
+            rmse_col = next((col for col in ['metrics.RMSE', 'metrics.rmse'] if col in runs.columns), None)
+
+            if r2_col and not runs[r2_col].isna().all():
+                best_idx = runs[r2_col].idxmax()
+                best = runs.loc[best_idx]
+
+                run_name = best.get('tags.mlflow.runName') or best.get('run_id', 'unknown')
+                r2_val = float(best.get(r2_col, 0)) if pd.notna(best.get(r2_col)) else 0.0
+                rmse_val = float(best.get(rmse_col, 0)) if (rmse_col and pd.notna(best.get(rmse_col))) else 0.0
+
+                metrics = {
+                    'best_model': {
+                        'name': str(run_name),
+                        'r2': r2_val,
+                        'rmse': rmse_val,
+                        'run_id': str(best.get('run_id', 'unknown'))
+                    },
+                    'total_runs': len(runs)
+                }
+
+            else:
+                metrics['total_runs'] = len(runs)
+
+    except Exception as e:
+        print(f"⚠️ Error querying MLflow runs: {e}")
     
-    # Save metrics
-    with open(DVC_METRICS / 'evaluation.json', 'w') as f:
+    # Save metrics to evaluation.json
+    output_file = DVC_METRICS / 'evaluation.json'
+    with open(output_file, 'w') as f:
         json.dump(metrics, f, indent=2)
     
     print(f"✅ Metrics saved: {metrics['total_runs']} runs")
