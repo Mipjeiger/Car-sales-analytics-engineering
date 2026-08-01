@@ -17,10 +17,5 @@ RUN pip install --no-cache-dir \
 
 EXPOSE 5000
 
-# Entry shell command to dynamically read environment variables
-CMD sh -c "mlflow server \
-    --backend-store-uri ${BACKEND_STORE_URI:-sqlite:///mlflow/mlflow.db} \
-    --default-artifact-root ${ARTIFACT_ROOT:-/mlflow/artifacts} \
-    --host 0.0.0.0 \
-    --port 5000 \
-    --allowed-hosts '*'"
+# Entry shell command array to dynamically read environment variables
+CMD ["sh", "-c", "mlflow server --backend-store-uri ${BACKEND_STORE_URI:-sqlite:///mlflow/mlflow.db} --default-artifact-root ${ARTIFACT_ROOT:-/mlflow/artifacts} --host 0.0.0.0 --port 5000"]
