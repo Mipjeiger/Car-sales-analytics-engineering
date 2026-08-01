@@ -17,6 +17,24 @@
 - Sales prediction on visual graph data visualization
     - Comparison ML models for sales prediction
     ![alt text](development/database/images/CB069150-EDDB-4346-A4C9-A7CD245995AB_1_105_c.jpeg)
+- Streamlit UI production to get car recommendation system AI Dashboard
+    ![alt text](development/database/images/1FBC6837-7934-43D3-B330-C4F01CBCF1BD_1_105_c.jpeg)
+    ![alt text](development/database/images/1A097914-282B-4459-B464-68F6FC2841EF_1_105_c.jpeg)
+    ![alt text](development/database/images/E70EAEE7-DBD6-4A8B-AF02-12C41F0EEF3E_1_105_c.jpeg)
+    ![alt text](development/database/images/C7723BB0-8CFE-4C7E-85B9-1F9834F443A8_1_105_c.jpeg)
+- DVC (Data Version Control)
+    ⚙️ DVC ensures data and pipeline determinism
+    ![alt text](development/database/images/D22ECAF4-20A6-40F0-93AE-DE9FA358F1E4.png)
+- Minio as S3 MLflow models storage
+    MLFLow models storage
+    ![alt text](development/database/images/E1176D1B-9384-4404-B1BF-BB4AD18C72DA_1_105_c.jpeg)
+    DVC data storage
+    ![alt text](<development/database/images/Screenshot 2026-08-01 at 22.11.06.png>)
+- MLFlow for experiment tracking and registry models
+    📈 Chart metrics model in MLflow
+    ![alt text](development/database/images/A0CAF509-0154-4347-952A-44EAC594E7E4_1_105_c.jpeg)
+    📊 Parallel coordinat in 9 models comparison with each models metrics
+    ![alt text](development/database/images/90417958-A154-4D14-A741-6573BF614ED9_1_105_c.jpeg)
 - Build computer vision deep learning for car recommendation system
 ╔══════════════════════════════════════════════════════════════╗
 ║                                                              ║
