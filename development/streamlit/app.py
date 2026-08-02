@@ -135,7 +135,7 @@ QTY_MODEL_FEATURES = [
 
 def load_all_models():
     """Load all models and data with caching"""
-    BASE_DIR = Path.cwd()
+    BASE_DIR = Path.cwd().parent.parent
     MODELS_DIR = BASE_DIR / 'development' / 'models'
     DATA_DIR = BASE_DIR / 'development' / 'database'
     
