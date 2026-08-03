@@ -1,0 +1,9 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN pip install dagster dagster-webserver dagster-postgres
+
+COPY . .
+
+CMD ["dagster-webserver", "-f", "orchestration/repository.py", "-h", "0.0.0.0"]
