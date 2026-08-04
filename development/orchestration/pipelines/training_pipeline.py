@@ -1,11 +1,9 @@
 import json
 import joblib
 import pandas as pd
-import numpy as np
 from pathlib import Path
 from catboost import CatBoostRegressor
-from xgboost import XGBRegressor
-from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_percentage_error
+from sklearn.metrics import root_mean_squared_error, r2_score, mean_absolute_percentage_error
 import mlflow
 from dagster import job, op
 
@@ -69,25 +67,20 @@ def _evaluate_all_dir_models(df: pd.DataFrame, target_type: str):
         algo_name = model_file.stem
         ext = model_file.suffix.lower()
 
-        # Skip non-model files if any
-        if ext not in ['.cbm', '.pkl', '.json']:
+        # Skip non-model files (.pkl and .cbm)
+        if ext not in ['.pkl', '.cbm']:
             continue
 
         try:
-            # Load Model based on extension/type
+            # 1. CatBoost Native CBM Loading
             if ext == '.cbm' or 'catboost' in algo_name:
                 model = CatBoostRegressor()
                 model.load_model(str(model_file))
 
-            elif ext == '.json' and 'xgboost' in algo_name:
-                model = XGBRegressor()
-                model.load_model(str(model_file))
-                
+            # 2. Scikit-Learn / XGBoost / DecisionTree / RandomForest loaded via Joblib (.pkl)
             elif ext == '.pkl':
-                # Skip if it's an extra xgboost pkl when json is already evaluated
-                if 'xgboost' in algo_name and (models_folder / "xgboost.json").exists() and ext == '.pkl':
-                    continue
                 model = joblib.load(model_file)
+                
             else:
                 continue
 
@@ -99,7 +92,7 @@ def _evaluate_all_dir_models(df: pd.DataFrame, target_type: str):
                 y_pred = target_scaler.inverse_transform(y_pred.reshape(-1, 1)).flatten()
 
             r2 = float(r2_score(y_true, y_pred))
-            rmse = float(np.sqrt(mean_squared_error(y_true, y_pred)))
+            rmse = float(root_mean_squared_error(y_true, y_pred))
             mape = float(mean_absolute_percentage_error(y_true, y_pred))
 
             results[algo_name] = {"r2": r2, "rmse": rmse, "mape": mape}
