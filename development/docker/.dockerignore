@@ -1,62 +1,119 @@
-# ============================================
-# 1. Git & Version Control
-# ============================================
-.git
+# Git
+.git/
 .gitignore
 .gitattributes
 
-# ============================================
-# 2. Python & Virtual Environments
-# ============================================
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.venv/
-venv/
+.Python
 env/
-ENV/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
 .pytest_cache/
-.mypy_cache/
-.tox/
 .coverage
 htmlcov/
+.tox/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+*.log
 
-# ============================================
-# 3. Environment Variables & Secrets
-# ============================================
-.env
-.env.*
-*.pem
-*.key
-*.p12
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+data_science/
+catboost_info/
 
-# ============================================
-# 4. Heavy Data & DVC Local Caches
-# ============================================
-# Exclude local DVC cache and temporary files (pulled inside container instead)
-.dvc/cache
-.dvc/tmp
-# Local database mounts
-pgdata/
-# Large datasets/models if managed via DVC or S3
+# Data
 *.parquet
-*.faiss
+*.csv
+*.db
+*.sqlite3
+pgdata/
+database/Cars_Dataset/
+database/images/
 
-# ============================================
-# 5. IDE, Editors, & OS Files
-# ============================================
+# Models (already tracked by DVC/MLflow)
+models/
+*.pkl
+*.cbm
+*.json
+*.faiss
+*.npy
+
+# DVC
+.dvc/
+dvc.lock
+dvc.yaml
+dvc/
+.dvcignore
+
+# MLflow
+mlflow/mlruns/
+mlflow/artifacts/
+mlflow/*.db
+mlflow/*.db-journal
+mlflow/*.db-wal
+
+# Streamlit
+streamlit/
+*.pyc
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+
+# OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# ============================================
-# 6. Docker & Build Artifacts
-# ============================================
-Dockerfile*
-docker-compose*.yml
-.dockerignore
+# Logs
 *.log
+logs/
+
+# Secrets
+.env
+*.key
+*.pem
+*.crt
+
+# Build
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Testing
+tests/
+__tests__/
+*.test.py
+
+# Development
+etl/
+pipeline/
+app/
+orchestration/
+docker/
+
+# Misc
+*.sh
+*.md
+*.xlsx
+*.xls
+*.zip
+*.tar.gz
+*.gz

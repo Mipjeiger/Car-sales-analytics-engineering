@@ -19,6 +19,31 @@ services:
     networks:
       - car_analytics_network
 
+  fastapi:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.fastapi
+    container_name: fastapi_car_analytics
+    ports:
+      - "8000:8000"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
+    networks:
+      - car_analytics_network
+
   minio:
     image: minio/minio:latest
     container_name: minio_car_analytics
@@ -53,11 +78,37 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
     volumes:
-      - ./development/mlflow:/mlflow
+      - ./mlflow:/mlflow
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 5s
+      timeout: 5s
+      retries: 2
     depends_on:
       postgres:
         condition: service_healthy
       minio:
+        condition: service_healthy
+    networks:
+      - car_analytics_network
+
+  dagster:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dagster
+    container_name: dagster_car_analytics
+    ports:
+      - "3003:3000"
+    environment:
+      - DAGSTER_POSTGRES_DB=${POSTGRES_DB}
+      - DAGSTER_POSTGRES_USER=${POSTGRES_USER}
+      - DAGSTER_POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - DAGSTER_POSTGRES_HOST=postgres
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    volumes:
+      - ./dagster_home:/app/dagster_home
+    depends_on:
+      postgres:
         condition: service_healthy
     networks:
       - car_analytics_network

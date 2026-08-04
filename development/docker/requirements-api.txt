@@ -1,0 +1,35 @@
+# Core
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+
+# ML
+mlflow==2.19.0
+scikit-learn==1.6.1
+pandas==2.2.3
+numpy<2.0
+joblib==1.4.2
+catboost==1.2.7
+
+# Image Processing
+pillow==11.1.0
+torch==2.5.1
+torchvision==0.20.1
+faiss-cpu==1.9.0
+
+# Orchestration
+dagster==1.10.2
+dagster-webserver==1.10.2
+dagster-postgres
+
+# Storage
+boto3==1.35.76
+
+# LLM & API Clients
+huggingface_hub>=0.23.0
+groq>=0.9.0
+
+
+# Utils
+python-dotenv>=1.0.1
+pyarrow==18.1.0
