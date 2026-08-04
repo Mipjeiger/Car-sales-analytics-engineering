@@ -12,35 +12,11 @@ services:
     volumes:
       - ./pgdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - car_analytics_network
-
-  fastapi:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.fastapi
-    container_name: fastapi_car_analytics
-    ports:
-      - "8000:8000"
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
-    depends_on:
-      postgres:
-        condition: service_healthy
-      mlflow:
-        condition: service_healthy
+      start_period: 10s
     networks:
       - car_analytics_network
 
@@ -53,6 +29,8 @@ services:
     environment:
       MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
       MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
     command: server /data --console-address ":9001"
     volumes:
       - minio-data:/data
@@ -61,6 +39,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
     networks:
       - car_analytics_network
 
@@ -81,9 +60,10 @@ services:
       - ./mlflow:/mlflow
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 2
+      retries: 5
+      start_period: 20s
     depends_on:
       postgres:
         condition: service_healthy
@@ -100,16 +80,55 @@ services:
     ports:
       - "3003:3000"
     environment:
-      - DAGSTER_POSTGRES_DB=${POSTGRES_DB}
-      - DAGSTER_POSTGRES_USER=${POSTGRES_USER}
-      - DAGSTER_POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - DAGSTER_POSTGRES_HOST=postgres
+      - DAGSTER_HOME=/app/dagster_home
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_HOST=postgres
       - MLFLOW_TRACKING_URI=http://mlflow:5000
     volumes:
       - ./dagster_home:/app/dagster_home
       - .:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     depends_on:
       postgres:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
+    networks:
+      - car_analytics_network
+
+  fastapi:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.fastapi
+    container_name: fastapi_car_analytics
+    ports:
+      - "8000:8000"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - PYTHONPATH=/app:/app/app  # Build context is development/, so app/ lands at /app/app/
+    volumes:
+      - .:/app  # Mount for development (hot reload)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
+      dagster:
         condition: service_healthy
     networks:
       - car_analytics_network

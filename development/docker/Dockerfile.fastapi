@@ -2,12 +2,19 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Copy and install dependencies
 COPY docker/requirements-api.txt .
 RUN pip install --no-cache-dir -r requirements-api.txt
 
+# Copy the entire project
 COPY . .
 
-# Explicitly add /app to Python module search path
-ENV PYTHONPATH=/app
+# Set Python path to include both the root and the app directory
+# Build context is development/, so COPY . . places files at /app/app/
+ENV PYTHONPATH=/app:/app/app
 
+# Create a symbolic link to make api module accessible from /app
+RUN ln -sf /app/app/api /app/api || true
+
+# Run uvicorn
 CMD ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000"]

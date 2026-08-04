@@ -5,3 +5,4 @@ development/pgdata/18/docker
 development/data_science/catboost_info
 .venv
 .vscode
+**__pycache__
