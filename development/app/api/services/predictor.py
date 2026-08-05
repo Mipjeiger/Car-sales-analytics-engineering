@@ -96,9 +96,11 @@ class ModelPredictor:
         elif xgb_pkl.exists():
             loaded_model = joblib.load(xgb_pkl)
 
-            # Patch deprecated/missing XGBoost attributes for backward compatibility
+            # 🛠️ Patch missing legacy XGBoost attributes
             if not hasattr(loaded_model, "gpu_id"):
                 setattr(loaded_model, "gpu_id", None)
+            if not hasattr(loaded_model, "predictor"):
+                setattr(loaded_model, "predictor", None)
 
             self.sales_models["Xgboost"] = loaded_model
 
@@ -244,17 +246,17 @@ class ModelPredictor:
         self, df: pd.DataFrame, domain_type: str, selected_model: Any
     ) -> pd.DataFrame:
         """Align columns to match training schema and apply feature scaling."""
-        # Modify: Ensure numeric features are converted from strings to numeric types
+        # Convert numeric features safely
         for col in df.columns:
             if col not in self.encoders:
                 try:
                     df[col] = pd.to_numeric(df[col])
                 except (ValueError, TypeError):
-                    pass # Leave column as-is if it cannot be converted to numeric
+                    pass
 
         expected_columns: List[str] = []
 
-        # 1. Determine exact target feature list from Scaler or Model
+        # 1. Determine target feature list
         scaler = self.scalers.get(domain_type)
         if isinstance(selected_model, xgb.Booster):
             expected_columns = selected_model.feature_names or []
@@ -263,23 +265,20 @@ class ModelPredictor:
         elif scaler and hasattr(scaler, "feature_names_in_"):
             expected_columns = list(scaler.feature_names_in_)
 
-        # 2. Reindex to include expected columns and drop unexpected ones
+        # 2. Reindex to align feature columns
         if expected_columns:
             missing = [c for c in expected_columns if c not in df.columns]
             if missing:
                 for m_col in missing:
-                    df[m_col] = 0  # Fill missing columns with zeros
+                    df[m_col] = 0
 
             df = df.reindex(columns=expected_columns)
 
-        # 3. Standard Scaling on tree models distorts values and forces low predictions like 2.98.
+        # 3. Check tree model status 🛠️ [FIX: Removed invalid outer any()]
         model_class_name = selected_model.__class__.__name__.lower()
-        is_tree_model = any(
-            isinstance(selected_model, xgb.Booster)
-            or any(
-                tree_type in model_class_name
-                for tree_type in ["randomforest", "decisiontree", "xgb", "catboost"]
-            )
+        is_tree_model = isinstance(selected_model, xgb.Booster) or any(
+            tree_type in model_class_name
+            for tree_type in ["randomforest", "decisiontree", "xgb", "catboost"]
         )
 
         if scaler and not is_tree_model:
@@ -287,7 +286,7 @@ class ModelPredictor:
             scaled_array = scaler.transform(df)
             return pd.DataFrame(scaled_array, columns=df.columns)
 
-        logger.info(f"⚠️ Skipping feature scaling for tree-based model: {model_class_name}")
+        logger.info(f"⚡ Skipping feature scaling for tree-based model: {model_class_name}")
         return df
         
     # =========================================================================
@@ -332,7 +331,6 @@ class ModelPredictor:
     def _predict_single_domain(
         self, domain_key: str, model_name: str, feature_dict: Dict[str, Any], source_df: Optional[pd.DataFrame] = None
     ) -> Tuple[float, float]:
-        """Internal helper to execute prediction for a single domain (sales or quantity)."""
         available_models = self.qty_models if domain_key == "qty" else self.sales_models
         selected_model = available_models.get(model_name)
 
@@ -342,12 +340,18 @@ class ModelPredictor:
                 f"Available models: {list(available_models.keys())}"
             )
 
-        # Preprocessing & Allignment
+        # Preprocessing & Alignment
         features_df = self._build_feature_dataframe(feature_dict, source_df)
         features_df = self._encode_categorical_features(features_df)
         features_df = self._scale_and_align_features(features_df, domain_key, selected_model)
 
         logger.info(f"🔎 Features input to {model_name} ({domain_key}):\n{features_df.head()}")
+
+        # 🛠️ [FIX 2]: Ensure gpu_id exists on selected_model before inference
+        if not hasattr(selected_model, "gpu_id"):
+            setattr(selected_model, "gpu_id", None)
+        if not hasattr(selected_model, "predictor"):
+            setattr(selected_model, "predictor", None)
 
         # Inference
         if isinstance(selected_model, xgb.Booster):
@@ -358,10 +362,9 @@ class ModelPredictor:
 
         confidence = self._calculate_confidence_score(selected_model, features_df, raw_pred)
 
-        # Target inverse transformation (Log1p applicants)
+        # Target inverse transformation
         final_pred = raw_pred
         if domain_key == "sales":
-
             if 0 < raw_pred < 100:
                 unlogged_pred = float(np.expm1(raw_pred))
                 if unlogged_pred < 1000:
