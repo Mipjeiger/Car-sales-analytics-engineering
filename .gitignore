@@ -6,3 +6,4 @@ development/data_science/catboost_info
 .venv
 .vscode
 **__pycache__
+development/dagster_home

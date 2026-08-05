@@ -1,9 +1,10 @@
 import os
 import logging
 from pathlib import Path
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Tuple, Optional, List
 
 import joblib
+import numpy as np
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 
@@ -189,7 +190,6 @@ class ModelPredictor:
     def _encode_categorical_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply label encoding to categorical columns with unknown-class fallback."""
         if not self.encoders:
-            logger.warning("⚠️ No encoders available. Skipping categorical encoding.")
             return df
 
         for col in df.columns:
@@ -215,61 +215,104 @@ class ModelPredictor:
         return df
 
     def _scale_and_align_features(
-        self, df: pd.DataFrame, domain_type: str
+        self, df: pd.DataFrame, domain_type: str, selected_model: Any
     ) -> pd.DataFrame:
         """Align columns to match training schema and apply feature scaling."""
         scaler = self.scalers.get(domain_type)
-        if not scaler:
-            return df
+        expected_columns: List[str] = []
 
-        expected_columns = list(getattr(scaler, "feature_names_in_", df.columns))
-        missing_columns = [col for col in expected_columns if col not in df.columns]
+        # 1. Determine exact target feature list from Scaler or Model
+        if scaler and hasattr(scaler, "feature_names_in_"):
+            expected_columns = list(scaler.feature_names_in_)
+        elif hasattr(selected_model, "feature_names_in_"):
+            expected_columns = list(selected_model.feature_names_in_)
 
-        if missing_columns:
-            raise ValueError(f"Missing required features for scaling: {missing_columns}")
+        # 2. Reindex to include expected columns and drop unexpected ones
+        if expected_columns:
+            missing = [c for c in expected_columns if c not in df.columns]
+            if missing:
+                raise ValueError(f"Missing expected features for domain '{domain_type}': {missing}")
 
-        df = df.reindex(columns=expected_columns)
-        scaled_array = scaler.transform(df)
+            df = df.reindex(columns=expected_columns)
+
+        # 3. Apply scaling if scaler is available
+        if scaler:
+            scaled_array = scaler.transform(df)
+            return pd.DataFrame(scaled_array, columns=df.columns)
+
+        return df
         
-        return pd.DataFrame(scaled_array, columns=expected_columns)
-
     # =========================================================================
     # 3. Main Inference Pipeline
     # =========================================================================
 
+    def _calculate_confidence_score(
+        self, selected_model: Any, features_df: pd.DataFrame, raw_prediction: float
+    ) -> float:
+        """Calculate realistic confidence score for regression models"""
+        # --- Approach 1: Ensemble Variance (For Random Forest / Decision Trees) ---
+        if hasattr(selected_model, "estimators_"):
+            try:
+                # Get prediction from all individual decision trees
+                tree_predictions = np.arrray([
+                    tree.predict(features_df.values)[0] for tree in selected_model.estimators_
+                ])
+
+                std_dev = np.std(tree_predictions)
+                mean_pred = np.mean(tree_predictions)
+
+                if mean_pred == 0:
+                    return 0.50
+
+                # Coficient of Variation (CV = std_dev / mean)
+                cv = abs(std_dev / mean_pred)
+
+                # Transform CV to confidence score: high variance -> lower confidence
+                confidence = float(np.exp(-cv))
+                return round(float(np.clip(confidence, 0.10, 0.99)), 3)
+
+            except Exception as e:
+                logger.warning(f"⚠️ Could not calculate tree ensemble confidence: {e}")
+
+        # --- Approach 2: Prediction Magnitude & Residual Fallback (XGBoost/CatBoost) ---
+        # For gradient boosted trees or single trees, use relative magnitude heuristics
+        if raw_prediction < 0:
+            return 0.15
+
+        # Assuming predictions closer to typical ranges hold higher
+        dampened_score = 1.0 / (1.0 + np.exp(-raw_prediction / (abs(raw_prediction) + 1e-5)))
+        return round(float(np.clip(dampened_score * 0.90, 0.35, 0.95)), 3)
+
     def predict(
         self, request: PredictRequest, source_df: Optional[pd.DataFrame] = None
     ) -> Tuple[float, float]:
-        """
-        Execute prediction pipeline for incoming request.
-
-        Args:
-            request: The model inference request containing model metadata and feature dict.
-            source_df: Optional DataFrame to override baseline reference features.
-
-        Returns:
-            Tuple[float, float]: (prediction_value, confidence_score)
-        """
-        model_type = request.model_type
+        """Execute prediction pipeline with normalized domain mapping."""
+        # 1. Normalize model domain key
+        raw_type = request.model_type.lower()
+        domain_key = "qty" if raw_type in ["quantity", "qty"] else "sales"
         model_name = request.model_name
 
-        # 1. Model Resolution
-        available_models = self.sales_models if model_type == "sales" else self.qty_models
+        # 2. Resolve Model
+        available_models = self.qty_models if domain_key == "qty" else self.sales_models
         selected_model = available_models.get(model_name)
 
         if not selected_model:
             raise ValueError(
-                f"Model '{model_name}' not found for domain '{model_type}'. "
+                f"Model '{model_name}' not found for domain '{domain_key}'. "
                 f"Available models: {list(available_models.keys())}"
             )
 
-        # 2. Pipeline Transformations
+        # 3. Pipeline Transformations
         features_df = self._build_feature_dataframe(request.features, source_df)
         features_df = self._encode_categorical_features(features_df)
-        features_df = self._scale_and_align_features(features_df, model_type)
+        features_df = self._scale_and_align_features(features_df, domain_key, selected_model)
 
-        # 3. Inference & Post-processing
+        # 4. Model Inference
         raw_prediction = float(selected_model.predict(features_df)[0])
-        confidence_score = 0.95 if raw_prediction >= 0 else 0.50
 
-        return raw_prediction, confidence_score
+        # 5. Conficence Score Calculation
+        confidence_score = self._calculate_confidence_score(
+            selected_model, features_df, raw_prediction
+        )
+
+        return raw_prediction, confidence_score 
