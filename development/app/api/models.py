@@ -26,5 +26,5 @@ class SearchRequest(BaseModel):
 
 class SearchResponse(BaseModel):
     results: List[dict]
-    query_brand: str
+    query_brand: Optional[str] = None
     total_results: int
