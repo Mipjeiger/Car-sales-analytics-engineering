@@ -1,0 +1,83 @@
+groups:
+  - name: car_sales_alerts
+    interval: 30s
+    rules:
+      # API Health Alert
+      - alert: FastAPIDown
+        expr: up{job="fastapi"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "FastAPI service is down"
+          description: "Car Sales API has been unreachable for 1 minute"
+
+      # Prediction Latency Alert
+      - alert: HighPredictionLatency
+        expr: histogram_quantile(0.95, sum(rate(fastapi_request_duration_seconds_bucket{endpoint="/predict"}[5m])) by (le)) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency detected"
+          description: "95th percentile prediction latency > 1s"
+
+      # MLflow Health Alert
+      - alert: MLflowDown
+        expr: up{job="mlflow"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MLflow service is down"
+          description: "Model registry is unavailable"
+
+      # High Error Rate Alert
+      - alert: HighErrorRate
+        expr: rate(fastapi_http_requests_total{status=~"5.."}[5m]) / rate(fastapi_http_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+          description: "> 5% of requests failing"
+
+      # Memory Alert
+      - alert: HighMemoryUsage
+        expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) > 0.85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Container memory usage > 85%"
+
+      # Prediction Model Performance
+      - alert: ModelPredictionDrift
+        expr: abs(avg(prediction_values) - avg(prediction_baseline)) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Model prediction drift detected"
+          description: "Average predictions deviating from baseline"
+
+      # Database Connection Alert
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "Database connection lost"
+
+      # Disk Space Alert
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space"
+          description: "Available disk space < 10%"

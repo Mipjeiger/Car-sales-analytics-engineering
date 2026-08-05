@@ -2,6 +2,7 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.10.4
+python-multipart==0.0.20
 
 # ML
 mlflow==2.19.0
@@ -10,6 +11,7 @@ pandas==2.2.3
 numpy<2.0
 joblib==1.4.2
 catboost==1.2.7
+xgboost==1.7.6
 
 # Image Processing
 pillow==11.1.0
