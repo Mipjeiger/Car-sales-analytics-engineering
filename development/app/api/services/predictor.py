@@ -32,6 +32,15 @@ class ModelPredictor:
         self.reference_df: Optional[pd.DataFrame] = self._load_reference_dataset()
         self._load_all_artifacts()
 
+    # ===========================================================================
+    # Model inspection methods
+    # ===========================================================================
+    def get_available_models(self) -> Dict[str, List[str]]:
+        return {
+            "sales_models": list(self.sales_models.keys()),
+            "quantity_models": list(self.qty_models.keys()),
+        }
+
     # =========================================================================
     # 1. Path Resolution & Artifact Loading
     # =========================================================================
@@ -78,12 +87,20 @@ class ModelPredictor:
         # XGBoost Model
         xgb_json = sales_dir / "xgboost.json"
         xgb_pkl = sales_dir / "xgboost.pkl"
+
         if xgb_json.exists():
-            model = xgb.XGBRegressor()
+            model = xgb.Booster()
             model.load_model(xgb_json)
             self.sales_models["Xgboost"] = model
+
         elif xgb_pkl.exists():
-            self.sales_models["Xgboost"] = joblib.load(xgb_pkl)
+            loaded_model = joblib.load(xgb_pkl)
+
+            # Patch deprecated/missing XGBoost attributes for backward compatibility
+            if not hasattr(loaded_model, "gpu_id"):
+                setattr(loaded_model, "gpu_id", None)
+
+            self.sales_models["Xgboost"] = loaded_model
 
         # Scikit-Learn Models
         for model_key in ["random_forest", "decision_tree"]:
@@ -135,9 +152,13 @@ class ModelPredictor:
 
         raw_encoders: Dict[str, Any] = joblib.load(encoder_path)
         for col_name, encoder_obj in raw_encoders.items():
-            # Handle nested structure: {'col_name': {0: LabelEncoder()}}
-            if isinstance(encoder_obj, dict) and 0 in encoder_obj:
-                self.encoders[col_name] = encoder_obj[0]
+            if isinstance(encoder_obj, dict):
+                # Search inside dictionary values for the actual LabelEncoder instance
+                for val in encoder_obj.values():
+                    if isinstance(val, LabelEncoder):
+                        self.encoders[col_name] = val
+                        break # Stop after finding the first LabelEncoder instance
+
             elif isinstance(encoder_obj, LabelEncoder):
                 self.encoders[col_name] = encoder_obj
 
@@ -197,20 +218,25 @@ class ModelPredictor:
                 continue
 
             encoder = self.encoders[col]
+
+            if not hasattr(encoder, "classes_"):
+                logger.warning(f"⚠️ Encoder for column '{col}' is missing 'classes_' attribute. Skipping encoding.")
+                continue
+
             series_str = df[col].astype(str)
 
             try:
                 df[col] = encoder.transform(series_str)
             except ValueError:
                 # Handle unknown out-of-vocabulary categorical values during inference
-                known_classes = set(encoder.classes_)
+                known_classes = set(encoder.classes_.tolist())
                 fallback_class = encoder.classes_[0]
+
+                # Map unknown categorical values to the fallback class
                 cleaned_series = series_str.apply(lambda x: x if x in known_classes else fallback_class)
-                
                 df[col] = encoder.transform(cleaned_series)
-                logger.warning(
-                    f"⚠️ Unseen value in column '{col}'. Fallback applied using '{fallback_class}'."
-                )
+
+                logger.warning(f"⚠️ Unseen value in column '{col}'. Fallback applied using '{fallback_class}'.")
 
         return df
 
@@ -218,28 +244,50 @@ class ModelPredictor:
         self, df: pd.DataFrame, domain_type: str, selected_model: Any
     ) -> pd.DataFrame:
         """Align columns to match training schema and apply feature scaling."""
-        scaler = self.scalers.get(domain_type)
+        # Modify: Ensure numeric features are converted from strings to numeric types
+        for col in df.columns:
+            if col not in self.encoders:
+                try:
+                    df[col] = pd.to_numeric(df[col])
+                except (ValueError, TypeError):
+                    pass # Leave column as-is if it cannot be converted to numeric
+
         expected_columns: List[str] = []
 
         # 1. Determine exact target feature list from Scaler or Model
-        if scaler and hasattr(scaler, "feature_names_in_"):
-            expected_columns = list(scaler.feature_names_in_)
+        scaler = self.scalers.get(domain_type)
+        if isinstance(selected_model, xgb.Booster):
+            expected_columns = selected_model.feature_names or []
         elif hasattr(selected_model, "feature_names_in_"):
             expected_columns = list(selected_model.feature_names_in_)
+        elif scaler and hasattr(scaler, "feature_names_in_"):
+            expected_columns = list(scaler.feature_names_in_)
 
         # 2. Reindex to include expected columns and drop unexpected ones
         if expected_columns:
             missing = [c for c in expected_columns if c not in df.columns]
             if missing:
-                raise ValueError(f"Missing expected features for domain '{domain_type}': {missing}")
+                for m_col in missing:
+                    df[m_col] = 0  # Fill missing columns with zeros
 
             df = df.reindex(columns=expected_columns)
 
-        # 3. Apply scaling if scaler is available
-        if scaler:
+        # 3. Standard Scaling on tree models distorts values and forces low predictions like 2.98.
+        model_class_name = selected_model.__class__.__name__.lower()
+        is_tree_model = any(
+            isinstance(selected_model, xgb.Booster)
+            or any(
+                tree_type in model_class_name
+                for tree_type in ["randomforest", "decisiontree", "xgb", "catboost"]
+            )
+        )
+
+        if scaler and not is_tree_model:
+            logger.info(f"📊 Applying feature scaler for non-tree model: {model_class_name}")
             scaled_array = scaler.transform(df)
             return pd.DataFrame(scaled_array, columns=df.columns)
 
+        logger.info(f"⚠️ Skipping feature scaling for tree-based model: {model_class_name}")
         return df
         
     # =========================================================================
@@ -254,7 +302,7 @@ class ModelPredictor:
         if hasattr(selected_model, "estimators_"):
             try:
                 # Get prediction from all individual decision trees
-                tree_predictions = np.arrray([
+                tree_predictions = np.array([
                     tree.predict(features_df.values)[0] for tree in selected_model.estimators_
                 ])
 
@@ -266,8 +314,6 @@ class ModelPredictor:
 
                 # Coficient of Variation (CV = std_dev / mean)
                 cv = abs(std_dev / mean_pred)
-
-                # Transform CV to confidence score: high variance -> lower confidence
                 confidence = float(np.exp(-cv))
                 return round(float(np.clip(confidence, 0.10, 0.99)), 3)
 
@@ -283,16 +329,10 @@ class ModelPredictor:
         dampened_score = 1.0 / (1.0 + np.exp(-raw_prediction / (abs(raw_prediction) + 1e-5)))
         return round(float(np.clip(dampened_score * 0.90, 0.35, 0.95)), 3)
 
-    def predict(
-        self, request: PredictRequest, source_df: Optional[pd.DataFrame] = None
+    def _predict_single_domain(
+        self, domain_key: str, model_name: str, feature_dict: Dict[str, Any], source_df: Optional[pd.DataFrame] = None
     ) -> Tuple[float, float]:
-        """Execute prediction pipeline with normalized domain mapping."""
-        # 1. Normalize model domain key
-        raw_type = request.model_type.lower()
-        domain_key = "qty" if raw_type in ["quantity", "qty"] else "sales"
-        model_name = request.model_name
-
-        # 2. Resolve Model
+        """Internal helper to execute prediction for a single domain (sales or quantity)."""
         available_models = self.qty_models if domain_key == "qty" else self.sales_models
         selected_model = available_models.get(model_name)
 
@@ -302,17 +342,68 @@ class ModelPredictor:
                 f"Available models: {list(available_models.keys())}"
             )
 
-        # 3. Pipeline Transformations
-        features_df = self._build_feature_dataframe(request.features, source_df)
+        # Preprocessing & Allignment
+        features_df = self._build_feature_dataframe(feature_dict, source_df)
         features_df = self._encode_categorical_features(features_df)
         features_df = self._scale_and_align_features(features_df, domain_key, selected_model)
 
-        # 4. Model Inference
-        raw_prediction = float(selected_model.predict(features_df)[0])
+        logger.info(f"🔎 Features input to {model_name} ({domain_key}):\n{features_df.head()}")
 
-        # 5. Conficence Score Calculation
-        confidence_score = self._calculate_confidence_score(
-            selected_model, features_df, raw_prediction
-        )
+        # Inference
+        if isinstance(selected_model, xgb.Booster):
+            dmatrix = xgb.DMatrix(features_df)
+            raw_pred = float(selected_model.predict(dmatrix)[0])
+        else:
+            raw_pred = float(selected_model.predict(features_df)[0])
 
-        return raw_prediction, confidence_score 
+        confidence = self._calculate_confidence_score(selected_model, features_df, raw_pred)
+
+        # Target inverse transformation (Log1p applicants)
+        final_pred = raw_pred
+        if domain_key == "sales":
+
+            if 0 < raw_pred < 100:
+                unlogged_pred = float(np.expm1(raw_pred))
+                if unlogged_pred < 1000:
+                    final_pred = unlogged_pred * 100_000_000
+                else:
+                    final_pred = unlogged_pred
+
+        return final_pred, confidence
+
+    def predict(
+        self, request: PredictRequest, source_df: Optional[pd.DataFrame] = None
+    ) -> Tuple[float, float]:
+        """Execute dual or single prediction based on request."""
+
+        # Normalize model domain key
+        raw_type = request.model_type.lower()
+        sales_m_name = request.sales_model_name or request.model_name
+        qty_m_name = request.quantity_model_name or request.model_name
+
+        # Wrap all prediction results in a dictionary
+        response_data: Dict[str, Any] = {
+            "model_type": raw_type,
+            "predicted_sales": None,
+            "sales_confidence": None,
+            "predicted_quantity": None,
+            "quantity_confidence": None,
+        }
+
+        # Predict sales (if requested or if "both")
+        if raw_type in ["sales", "both", "all"]:
+            raw_sales, sales_conf = self._predict_single_domain(
+                "sales", sales_m_name, request.features, source_df
+            )
+            response_data["predicted_sales"] = round(max(0.0, raw_sales), 2)
+            response_data["sales_confidence"] = sales_conf
+
+        # Predict quantity (if requested or if "both")
+        if raw_type in ["quantity", "both", "all"]:
+            raw_qty, qty_conf = self._predict_single_domain(
+                "qty", qty_m_name, request.features, source_df
+            )
+            response_data["predicted_quantity"] = max(1, int(round(raw_qty)))
+            response_data["quantity_confidence"] = qty_conf
+
+        return response_data

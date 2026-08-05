@@ -1,17 +1,25 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 class PredictRequest(BaseModel):
-    model_type: str # "Sales" or "Quantity"
-    model_name: str
-    features: dict
+    model_type: str = "both"  # Options: "sales", "quantity", "both"
+    sales_model_name: Optional[str] = None
+    quantity_model_name: Optional[str] = None
+    model_name: Optional[str] = None  # Fallback single model_name parameter for backward compatibility
+    features: Dict[str, Any]
+
+class AvailableModelsResponse(BaseModel):
+    sales_models: List[str]
+    quantity_models: List[str]
 
 class PredictResponse(BaseModel):
-    prediction: float
-    model_name: str
-    confidence: Optional[float] = None
+    model_type: str
+    predicted_sales: Optional[float] = None
+    sales_confidence: Optional[float] = None
+    predicted_quantity: Optional[float] = None
+    quantity_confidence: Optional[float] = None
 
-class ChatRequest(BaseModel):
+class ChatRequest(BaseModel):   
     message: str
     context: Optional[List[str]] = None
 

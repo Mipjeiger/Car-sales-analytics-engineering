@@ -7,3 +7,4 @@ development/data_science/catboost_info
 .vscode
 **__pycache__
 development/dagster_home
+development/database/transfering_data_to_sql.py
