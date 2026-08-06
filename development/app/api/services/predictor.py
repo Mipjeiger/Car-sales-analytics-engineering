@@ -26,6 +26,7 @@ class ModelPredictor:
         self.sales_models: Dict[str, Any] = {}
         self.qty_models: Dict[str, Any] = {}
         self.scalers: Dict[str, Any] = {}
+        self.target_scalers: Dict[str, Any] = {}
         self.encoders: Dict[str, LabelEncoder] = {}
 
         self.reference_df: Optional[pd.DataFrame] = self._load_reference_dataset()
@@ -128,7 +129,7 @@ class ModelPredictor:
             self.qty_models[model_name] = joblib.load(model_file)
 
     def _load_scalers(self) -> None:
-        """Load feature scalers for sales and quantity domains."""
+        """Load feature scalers and target scalers for sales and quantity domains."""
         sales_scaler_path = self.models_dir / "sales_prediction" / "scalers" / "feature_scaler.pkl"
         qty_scaler_path = self.models_dir / "quantity_prediction" / "scalers" / "feature_scaler.pkl"
 
@@ -139,6 +140,17 @@ class ModelPredictor:
         if qty_scaler_path.exists():
             self.scalers["quantity"] = joblib.load(qty_scaler_path)
             logger.info(f"✅ Loaded Quantity Scaler from {qty_scaler_path}")
+
+        sales_target_scaler_path = self.models_dir / "sales_prediction" / "scalers" / "target_scaler.pkl"
+        qty_target_scaler_path = self.models_dir / "quantity_prediction" / "scalers" / "target_scaler.pkl"
+
+        if sales_target_scaler_path.exists():
+            self.target_scalers["sales"] = joblib.load(sales_target_scaler_path)
+            logger.info(f"✅ Loaded Sales Target Scaler from {sales_target_scaler_path}")
+
+        if qty_target_scaler_path.exists():
+            self.target_scalers["quantity"] = joblib.load(qty_target_scaler_path)
+            logger.info(f"✅ Loaded Quantity Target Scaler from {qty_target_scaler_path}")
 
     def _load_encoders(self) -> None:
         """Unpack nested categorical label encoders from single artifact dictionary."""
@@ -172,7 +184,11 @@ class ModelPredictor:
         df = self.reference_df.copy()
         matched = df
 
-        if "model" in input_features and "model" in df.columns:
+        if "car_id" in input_features and "car_id" in df.columns:
+            filtered = df[df["car_id"].astype(str).str.lower() == str(input_features["car_id"]).lower()]
+            if not filtered.empty:
+                matched = filtered
+        elif "model" in input_features and "model" in df.columns:
             filtered = df[df["model"].astype(str).str.lower() == str(input_features["model"]).lower()]
             if not filtered.empty:
                 matched = filtered
@@ -254,6 +270,14 @@ class ModelPredictor:
             except (ValueError, TypeError):
                 pass
 
+        skewed_features = [
+            "sales", "lag_1", "lag_7", "lag_30", "rolling_mean_7", "rolling_std_7", "rolling_max_7",
+            "cost", "total_cost", "profit", "price", "income_customer", "gross_sales", "discount_amount"
+        ]
+        for col in df.columns:
+            if col in skewed_features and pd.api.types.is_numeric_dtype(df[col]):
+                df[col] = np.log1p(np.maximum(0.0, df[col]))
+
         expected_columns: List[str] = []
 
         scaler = self.scalers.get(domain_type)
@@ -275,17 +299,11 @@ class ModelPredictor:
             logger.info(f"📊 Final Dataframe shape before scaling: {df.shape}")
 
         model_class_name = selected_model.__class__.__name__.lower()
-        is_tree_model = isinstance(selected_model, xgb.Booster) or any(
-            tree_type in model_class_name
-            for tree_type in ["randomforest", "decisiontree", "xgb", "catboost"]
-        )
-
-        if scaler and not is_tree_model:
-            logger.info(f"📊 Applying feature scaler for non-tree model: {model_class_name}")
+        if scaler is not None:
+            logger.info(f"📊 Applying feature scaler for model: {model_class_name}")
             scaled_array = scaler.transform(df)
             return pd.DataFrame(scaled_array, columns=df.columns)
 
-        logger.info(f"⚡ Skipping feature scaling for tree-based model: {model_class_name}")
         return df
 
     # =========================================================================
@@ -293,7 +311,7 @@ class ModelPredictor:
     # =========================================================================
 
     def _calculate_confidence_score(
-        self, selected_model: Any, features_df: pd.DataFrame, raw_prediction: float
+        self, selected_model: Any, features_df: pd.DataFrame, raw_prediction: float, final_prediction: float = 0.0
     ) -> float:
         """Calculate realistic confidence score using ensemble variance or target z-distance."""
         try:
@@ -322,43 +340,39 @@ class ModelPredictor:
             except Exception as e:
                 logger.warning(f"⚠️ Tree ensemble confidence error: {e}")
 
-        if raw_prediction < 0:
+        if final_prediction < 0:
             return 0.15
 
         if self.reference_df is not None and not self.reference_df.empty:
             mean_val = float(self.reference_df["sales"].mean()) if "sales" in self.reference_df.columns else 10000.0
             std_val = float(self.reference_df["sales"].std()) if "sales" in self.reference_df.columns else 5000.0
 
-            # Scale raw_prediction if log-transformed before z-distance calc
-            scaled_pred = np.expm1(raw_prediction) if (mean_val > 1000 and 0 < raw_prediction <= 30) else raw_prediction
-            z_score = abs(scaled_pred - mean_val) / (std_val + 1e-5)
+            z_score = abs(final_prediction - mean_val) / (std_val + 1e-5)
             confidence = float(np.exp(-0.5 * z_score))
             return round(float(np.clip(confidence, 0.35, 0.95)), 3)
 
         return 0.75
 
     def _scale_prediction_to_range(self, raw_pred: float, domain_key: str) -> float:
-        """Inverse-transform predictions based on log, z-score, or magnitude checks."""
-        # 1. Log-transformed target check (np.expm1)
-        if 0.0 < raw_pred <= 30.0:
-            denormalized = float(np.expm1(raw_pred))
-            logger.info(f"🔄 Applied np.expm1 log transform: {raw_pred:.4f} -> {denormalized:.2f}")
+        """Inverse-transform predictions based on target_scaler (StandardScaler) and expm1 log transform."""
+        domain_type = "sales" if "sale" in domain_key.lower() else "quantity"
+        target_scaler = self.target_scalers.get(domain_type)
+
+        pred_log = raw_pred
+        if target_scaler is not None:
+            try:
+                pred_log = float(target_scaler.inverse_transform(np.array([[raw_pred]]))[0][0])
+                logger.info(f"🔄 Applied target scaler inverse transform for {domain_type}: {raw_pred:.4f} -> {pred_log:.4f}")
+            except Exception as e:
+                logger.warning(f"⚠️ Error applying target scaler inverse transform: {e}")
+
+        # Revert log1p transformation: expm1(pred_log) = exp(pred_log) - 1
+        if pred_log > 0.0:
+            denormalized = float(np.expm1(pred_log))
+            logger.info(f"🔄 Applied np.expm1 log transform for {domain_type}: {pred_log:.4f} -> {denormalized:.2f}")
             return max(0.0, denormalized)
 
-        # 2. Check if model outputs values in millions/thousands scale (e.g., Decision Tree leaf nodes)
-        if self.reference_df is not None and not self.reference_df.empty:
-            target_col = "sales" if "sale" in domain_key.lower() else "quantity"
-            if target_col in self.reference_df.columns:
-                ref_mean = float(self.reference_df[target_col].mean())
-                ref_std = float(self.reference_df[target_col].std())
-
-                # Standardized Z-Score fallback
-                if -5.0 <= raw_pred <= 5.0 and ref_std > 0:
-                    denormalized = (raw_pred * ref_std) + ref_mean
-                    logger.info(f"🔄 Applied Z-score inverse scaling: {raw_pred:.4f} -> {denormalized:.2f}")
-                    return max(1.0 if target_col == "quantity" else 0.0, float(denormalized))
-
-        return max(0.0, float(raw_pred))
+        return max(0.0, float(pred_log))
 
     def _predict_single_domain(
         self, domain_key: str, model_name: str, feature_dict: Dict[str, Any], source_df: Optional[pd.DataFrame] = None
@@ -393,14 +407,9 @@ class ModelPredictor:
 
         logger.info(f"📊 Raw [{domain_type}] prediction for '{model_name}': {raw_pred}")
 
-        # 🚨 HARD-INVERT LOG-TRANSFORMED SALES (Independent of reference_df)
-        if is_sales and 0.0 < raw_pred <= 30.0:
-            final_pred = float(np.expm1(raw_pred))
-            logger.info(f"🔄 Applied expm1 log inversion: {raw_pred:.4f} -> {final_pred:.2f}")
-        else:
-            final_pred = self._scale_prediction_to_range(raw_pred, domain_type)
+        final_pred = self._scale_prediction_to_range(raw_pred, domain_type)
 
-        confidence = self._calculate_confidence_score(selected_model, features_df_scaled, raw_pred)
+        confidence = self._calculate_confidence_score(selected_model, features_df_scaled, raw_pred, final_pred)
 
         return final_pred, confidence
 
@@ -420,6 +429,8 @@ class ModelPredictor:
         }
 
         features = request.features.copy()
+        initial_gross_sales = request.features.get("gross_sales")
+        initial_profit = request.features.get("profit")
 
         # 1. Predict Quantity first
         if raw_type in ["quantity", "both", "all"]:
@@ -432,16 +443,17 @@ class ModelPredictor:
             # Pass updated quantity feature
             features["quantity"] = response_data["predicted_quantity"]
 
-            # Derive unit price if missing to adjust gross sales dynamically
-            if "gross_sales" in features and "price" not in features:
-                # Estimate baseline unit price from previous default/input gross sales
-                prev_qty = request.features.get("quantity", 1)
-                unit_price = float(features["gross_sales"]) / float(prev_qty if prev_qty > 0 else 1)
-                features["price"] = unit_price
-
-            if "price" in features:
-                features["gross_sales"] = float(features["price"]) * float(features["quantity"])
-                if "cost" in features:
+            # Only recalculate gross_sales if gross_sales was NOT explicitly provided by user
+            if initial_gross_sales is None:
+                if "price" in features:
+                    features["gross_sales"] = float(features["price"]) * float(features["quantity"])
+                    if "cost" in features:
+                        features["profit"] = float(features["gross_sales"]) - float(features["cost"])
+            else:
+                features["gross_sales"] = float(initial_gross_sales)
+                if initial_profit is not None:
+                    features["profit"] = float(initial_profit)
+                elif "cost" in features:
                     features["profit"] = float(features["gross_sales"]) - float(features["cost"])
 
         # 2. Predict Sales with updated features
