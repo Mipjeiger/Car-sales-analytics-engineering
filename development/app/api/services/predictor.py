@@ -16,7 +16,6 @@ from app.api.models import PredictRequest
 
 logger = logging.getLogger(__name__)
 
-
 class ModelPredictor:
     """Service class responsible for loading ML artifacts and executing predictions."""
 
@@ -142,7 +141,7 @@ class ModelPredictor:
             logger.info(f"✅ Loaded Sales Scaler from {sales_scaler_path}")
 
         if qty_scaler_path.exists():
-            self.scalers["qty"] = joblib.load(qty_scaler_path)
+            self.scalers["quantity"] = joblib.load(qty_scaler_path)
             logger.info(f"✅ Loaded Quantity Scaler from {qty_scaler_path}")
 
     def _load_encoders(self) -> None:
@@ -173,38 +172,39 @@ class ModelPredictor:
     def _find_reference_row(self, input_features: Dict[str, Any]) -> Optional[pd.Series]:
         """Find a baseline matching row from reference dataset for missing input features."""
         if self.reference_df is None or self.reference_df.empty:
-            logger.warning("⚠️ Reference DataFrame is unavailable for feature imputation.")
             return None
 
         df = self.reference_df.copy()
-        matching_columns = [col for col in input_features if col in df.columns]
 
-        if matching_columns:
-            mask = pd.Series(True, index=df.index)
-            for col in matching_columns:
-                mask &= (df[col].astype(str) == str(input_features[col]))
-            matched_rows = df[mask]
-            
-            if not matched_rows.empty:
-                logger.info("✅ Found matching reference row for missing feature imputation.")
-                return matched_rows.iloc[0]
-
-        return df.iloc[0]
+        # Filtered reference dataset by categorical matches in input features 
+        if "model" in input_features and "model" in df.columns:
+            matched = df[df["model"].astype(str).str.lower() == str(input_features["model"]).lower()]
+            if not matched.empty:
+                return matched.select_dtypes(include=[np.number]).median()
 
     def _build_feature_dataframe(
         self, input_features: Dict[str, Any], source_df: Optional[pd.DataFrame] = None
     ) -> pd.DataFrame:
         """Construct complete single-row DataFrame using inputs and reference values."""
-        feature_df = pd.DataFrame([input_features])
+        feature_dict = input_features.copy()
 
-        reference_row = None
-        if source_df is not None and not source_df.empty:
-            reference_row = source_df.iloc[0]
-        else:
-            reference_row = self._find_reference_row(input_features)
+        # Compute basic derived features dynamically
+        if "profit" not in feature_dict and "gross_sales" in feature_dict and "cost" in feature_dict:
+            feature_dict["profit"] = float(feature_dict["gross_sales"] - feature_dict["cost"])
+
+        # Default date features if missing
+        now = pd.Timestamp.now()
+        feature_dict.setdefault("day_of_week", now.dayofweek)
+        feature_dict.setdefault("week_of_year", now.isocalendar().week)
+        feature_dict.setdefault("season", (now.month % 12 + 3) // 3)  # 1=Winter, 2=Spring, 3=Summer, 4=Fall
+
+        feature_df = pd.DataFrame([feature_dict])
+
+        # Fill remaining missing feature from aggregated reference row if available
+        reference_row = source_df.iloc[0] if (source_df is not None and not source_df.empty) else self._find_reference_row(feature_dict)
 
         if reference_row is not None:
-            for col in reference_row.index:
+            for col in feature_df.columns:
                 if col not in feature_df.columns:
                     feature_df[col] = reference_row[col]
 
@@ -269,10 +269,13 @@ class ModelPredictor:
         if expected_columns:
             missing = [c for c in expected_columns if c not in df.columns]
             if missing:
+                logger.warning(f"⚠️ Missing expected features for domain '{domain_type}': {missing}. Filling with zeros.")
                 for m_col in missing:
                     df[m_col] = 0
 
-            df = df.reindex(columns=expected_columns)
+            # Drop any extra columns not in expected list
+            df = df[expected_columns]
+            logger.info(f"📊 Final Dataframe shape before scaling: {df.shape}")
 
         # 3. Check tree model status 🛠️ [FIX: Removed invalid outer any()]
         model_class_name = selected_model.__class__.__name__.lower()
@@ -297,6 +300,19 @@ class ModelPredictor:
         self, selected_model: Any, features_df: pd.DataFrame, raw_prediction: float
     ) -> float:
         """Calculate realistic confidence score for regression models"""
+
+        # Ensure all features are numeric for confidence calculations
+        try:
+            numeric_df = features_df.copy()
+            for col in numeric_df.columns:
+                numeric_df[col] = pd.to_numeric(numeric_df[col], errors='coerce')
+
+            logger.info(f"📊 Confidence calc features dtype:\n{numeric_df.dtypes}")
+
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to convert features to numeric for confidence calculation: {e}")
+            return 0.50 
+
         # --- Approach 1: Ensemble Variance (For Random Forest / Decision Trees) ---
         if hasattr(selected_model, "estimators_"):
             try:
@@ -342,10 +358,13 @@ class ModelPredictor:
 
         # Preprocessing & Alignment
         features_df = self._build_feature_dataframe(feature_dict, source_df)
-        features_df = self._encode_categorical_features(features_df)
-        features_df = self._scale_and_align_features(features_df, domain_key, selected_model)
+        logger.info(f"🔍 [DEBUG] Initial features_df before encoding:\n{features_df.to_dict()}")
 
-        logger.info(f"🔎 Features input to {model_name} ({domain_key}):\n{features_df.head()}")
+        features_df_encoded = self._encode_categorical_features(features_df.copy())
+        logger.info(f"🔍 [DEBUG] Features after encoding:\n{features_df_encoded.to_dict()}")
+
+        features_df_scaled = self._scale_and_align_features(features_df_encoded.copy(), domain_key, selected_model)
+        logger.info(f"🔍 [DEBUG] Features after scaling and alignment:\n{features_df_scaled.to_dict()}")
 
         # 🛠️ [FIX 2]: Ensure gpu_id exists on selected_model before inference
         if not hasattr(selected_model, "gpu_id"):
@@ -355,24 +374,110 @@ class ModelPredictor:
 
         # Inference
         if isinstance(selected_model, xgb.Booster):
-            dmatrix = xgb.DMatrix(features_df)
+            dmatrix = xgb.DMatrix(features_df_scaled)
             raw_pred = float(selected_model.predict(dmatrix)[0])
         else:
-            raw_pred = float(selected_model.predict(features_df)[0])
+            raw_pred = float(selected_model.predict(features_df_scaled)[0])
 
-        confidence = self._calculate_confidence_score(selected_model, features_df, raw_pred)
+        logger.info(f"📊 Raw prediction from model: {raw_pred}")
 
-        # Target inverse transformation
-        final_pred = raw_pred
-        if domain_key == "sales":
-            if 0 < raw_pred < 100:
-                unlogged_pred = float(np.expm1(raw_pred))
-                if unlogged_pred < 1000:
-                    final_pred = unlogged_pred * 100_000_000
-                else:
-                    final_pred = unlogged_pred
+        final_pred = self._scale_prediction_to_range(raw_pred, domain_key)
+        confidence = self._calculate_confidence_score(selected_model, features_df_scaled, raw_pred)
+        logger.info(f"📈 Confidence score for prediction: {confidence}")
 
         return final_pred, confidence
+
+    def _scale_prediction_to_range(self, raw_pred: float, domain_key: str) -> float:
+        """
+        Return raw prediction directly if model was trained on unscaled targets.
+        Only denormalize if target standardization was explicitly applied during training.
+        """
+        scaler = self.scalers.get(domain_key)
+        
+        if domain_key == "sales":
+            target_col = "sales"
+            
+            # 🛠️ [FIX 1]: Use scaler's mean and std to denormalize z-score
+            if scaler and hasattr(scaler, "mean_"):
+                # Get the index of the target column in the scaler
+                feature_names = list(scaler.feature_names_in_)
+                
+                if target_col in feature_names:
+                    target_idx = feature_names.index(target_col)
+                    
+                    mean = float(scaler.mean_[target_idx])
+                    scale = float(scaler.scale_[target_idx])  # or std for StandardScaler
+                    
+                    # Denormalize: original = z_score * scale + mean
+                    denormalized = (raw_pred * scale) + mean
+                    
+                    logger.info(f"📊 Denormalizing sales z-score {raw_pred}:")
+                    logger.info(f"   Mean: {mean}, Scale: {scale}")
+                    logger.info(f"   Denormalized: {denormalized}")
+                    
+                    return denormalized
+            
+            # 🛠️ [FIX 2]: Fallback to reference dataset if scaler unavailable
+            if self.reference_df is None or self.reference_df.empty:
+                logger.warning("⚠️ Reference DataFrame and scaler unavailable. Returning raw prediction.")
+                return raw_pred
+
+            min_val = float(self.reference_df[target_col].min())
+            max_val = float(self.reference_df[target_col].max())
+            mean_val = float(self.reference_df[target_col].mean())
+            std_val = float(self.reference_df[target_col].std())
+
+            logger.info(f"📊 Reference sales stats - Min: {min_val}, Max: {max_val}, Mean: {mean_val}, Std: {std_val}")
+            logger.info(f"📊 Raw prediction (z-score): {raw_pred}")
+
+            # Denormalize using reference stats
+            denormalized = (raw_pred * std_val) + mean_val
+            clipped = np.clip(denormalized, min_val * 0.8, max_val * 1.2)
+            
+            logger.info(f"🔄 Denormalized to {denormalized}, clipped to {clipped}")
+            return clipped
+
+        elif domain_key == "qty":
+            target_col = "quantity"
+            
+            # 🛠️ [FIX 1]: Use scaler's mean and std to denormalize z-score
+            if scaler and hasattr(scaler, "mean_"):
+                feature_names = list(scaler.feature_names_in_)
+                
+                if target_col in feature_names:
+                    target_idx = feature_names.index(target_col)
+                    
+                    mean = float(scaler.mean_[target_idx])
+                    scale = float(scaler.scale_[target_idx])
+                    
+                    # Denormalize
+                    denormalized = (raw_pred * scale) + mean
+                    denormalized = max(1, int(round(denormalized)))
+                    
+                    logger.info(f"📊 Denormalizing quantity z-score {raw_pred}:")
+                    logger.info(f"   Mean: {mean}, Scale: {scale}")
+                    logger.info(f"   Denormalized: {denormalized}")
+                    
+                    return denormalized
+            
+            # 🛠️ [FIX 2]: Fallback to reference dataset
+            if self.reference_df is None or self.reference_df.empty:
+                logger.warning("⚠️ Reference DataFrame and scaler unavailable. Returning raw prediction.")
+                return max(1, int(round(raw_pred)))
+
+            min_val = float(self.reference_df[target_col].min())
+            max_val = float(self.reference_df[target_col].max())
+            mean_val = float(self.reference_df[target_col].mean())
+            std_val = float(self.reference_df[target_col].std())
+
+            # Denormalize using reference stats
+            denormalized = (raw_pred * std_val) + mean_val
+            denormalized = max(1, int(round(np.clip(denormalized, min_val, max_val))))
+            
+            logger.info(f"🔄 Denormalized quantity to {denormalized}")
+            return denormalized
+
+        return raw_pred
 
     def predict(
         self, request: PredictRequest, source_df: Optional[pd.DataFrame] = None
