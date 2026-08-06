@@ -1,0 +1,193 @@
+{
+  "title": "MLOps Full Stack Dashboard",
+  "panels": [
+    {
+      "title": "Container CPU",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+      "targets": [{
+        "expr": "rate(container_cpu_usage_seconds_total[5m]) * 100",
+        "legendFormat": "{{ container }}"
+      }]
+    },
+    {
+      "title": "Container Memory",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
+      "targets": [{
+        "expr": "container_memory_usage_bytes / 1024 / 1024",
+        "legendFormat": "{{ container }} MB"
+      }]
+    },
+    {
+      "title": "Container Status",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
+      "targets": [{
+        "expr": "count(container_last_seen) by (container)"
+      }]
+    },
+    {
+      "title": "Network I/O",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+      "targets": [
+        {"expr": "rate(container_network_receive_bytes_total[5m])", "legendFormat": "RX"},
+        {"expr": "rate(container_network_transmit_bytes_total[5m])", "legendFormat": "TX"}
+      ]
+    },
+
+    {
+      "title": "ETL Job Status",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 8},
+      "targets": [{
+        "expr": "pg_stat_database_numbackends",
+        "legendFormat": "Active Connections"
+      }]
+    },
+    {
+      "title": "Data Volume",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 8},
+      "targets": [{
+        "expr": "pg_stat_database_tup_inserted + pg_stat_database_tup_updated",
+        "legendFormat": "Data Operations"
+      }]
+    },
+    {
+      "title": "Pipeline Health",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 8},
+      "targets": [{
+        "expr": "count(up{job='postgresql'})",
+        "legendFormat": "Services Up"
+      }]
+    },
+    {
+      "title": "DVC Status",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 8},
+      "targets": [{
+        "expr": "up{job='dvc'}",
+        "legendFormat": "DVC Pipeline"
+      }]
+    },
+
+    {
+      "title": "Model R² Score",
+      "type": "gauge",
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 16},
+      "targets": [{
+        "expr": "mlflow_model_r2",
+        "legendFormat": "{{ model_name }}"
+      }],
+      "fieldConfig": {
+        "defaults": {"min": 0, "max": 1, "unit": "percentunit"}
+      }
+    },
+    {
+      "title": "Model Versions",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 16},
+      "targets": [{
+        "expr": "count(mlflow_model_versions_total) by (model_name)"
+      }]
+    },
+    {
+      "title": "Prediction Distribution",
+      "type": "histogram",
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 16},
+      "targets": [{
+        "expr": "histogram_quantile(0.5, sum(rate(prediction_distribution_bucket[5m])) by (le))"
+      }]
+    },
+    {
+      "title": "Model Drift",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 16},
+      "targets": [{
+        "expr": "abs(avg(prediction_values) - avg(prediction_baseline))",
+        "legendFormat": "Drift"
+      }]
+    },
+
+    {
+      "title": "Request Rate",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 24},
+      "targets": [{
+        "expr": "rate(http_requests_total[5m])",
+        "legendFormat": "{{ endpoint }}"
+      }]
+    },
+    {
+      "title": "Latency (95th)",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 24},
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, endpoint))",
+        "legendFormat": "{{ endpoint }}"
+      }]
+    },
+    {
+      "title": "Error Rate",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 24},
+      "targets": [{
+        "expr": "rate(http_requests_total{status=~'5..'}[5m]) / rate(http_requests_total[5m])",
+        "legendFormat": "Errors"
+      }]
+    },
+    {
+      "title": "Active Connections",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 24},
+      "targets": [{
+        "expr": "sum(active_connections)",
+        "legendFormat": "Active"
+      }]
+    },
+
+    {
+      "title": "Prediction Volume",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 32},
+      "targets": [{
+        "expr": "rate(predictions_total[1h])",
+        "legendFormat": "Predictions/hour"
+      }]
+    },
+    {
+      "title": "Revenue Impact",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 32},
+      "targets": [{
+        "expr": "business_revenue_impact"
+      }],
+      "fieldConfig": {
+        "defaults": {"unit": "currencyIDR"}
+      }
+    },
+    {
+      "title": "User Engagement",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 32},
+      "targets": [{
+        "expr": "business_active_users",
+        "legendFormat": "Active Users"
+      }]
+    },
+    {
+      "title": "Business KPIs",
+      "type": "table",
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 32},
+      "targets": [{
+        "expr": "business_kpi_metrics",
+        "format": "table"
+      }]
+    }
+  ],
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"}
+}
