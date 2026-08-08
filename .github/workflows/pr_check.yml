@@ -2,7 +2,7 @@ name: PR Check
 
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [main, development]
 
 jobs:
   validate:
@@ -23,8 +23,8 @@ jobs:
       
       - name: Lint
         run: |
-          flake8 development/api/ --max-complexity=10
-          black --check development/api/
+          flake8 development/app/api/ --max-complexity=10
+          black --check development/app/api/
       
       - name: Run tests
         run: |
