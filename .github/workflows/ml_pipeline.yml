@@ -1,0 +1,59 @@
+name: ML Model Training
+
+on:
+  workflow_dispatch:  # Manual trigger only
+  push:
+    paths:
+      - 'development/data_science/*.ipynb'
+      - 'development/models/**'
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install dvc
+      
+      - name: Configure storage
+        run: |
+          echo "MLFLOW_S3_ENDPOINT_URL=${{ secrets.MINIO_ENDPOINT }}" >> $GITHUB_ENV
+          echo "AWS_ACCESS_KEY_ID=${{ secrets.MINIO_ACCESS_KEY }}" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.MINIO_SECRET_KEY }}" >> $GITHUB_ENV
+      
+      - name: Pull data
+        run: |
+          cd development
+          dvc pull
+      
+      - name: Run training
+        run: |
+          cd development
+          python pipeline/stages/train_models.py
+      
+      - name: Register model
+        run: |
+          cd development
+          python mlflow/load_existing_models.py
+      
+      - name: Push to DVC
+        run: |
+          cd development
+          dvc push
+      
+      - name: Commit changes
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add development/models/
+          git commit -m "Auto: Update models [skip ci]" || exit 0
+          git push
