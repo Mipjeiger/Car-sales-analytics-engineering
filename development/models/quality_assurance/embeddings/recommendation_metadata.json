@@ -1,0 +1,11 @@
+{
+  "model_name": "vit_damage_classifier",
+  "embedding_dim": 768,
+  "num_embeddings": 2143,
+  "num_classes": 3,
+  "classes": [
+    "door_scratch",
+    "head_lamp",
+    "no_damage"
+  ]
+}
