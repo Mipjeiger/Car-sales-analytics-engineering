@@ -19,8 +19,8 @@ jobs:
       
       - name: Build and push images
         run: |
-          docker build -f development/docker/Dockerfile.fastapi -t ${{ secrets.DOCKER_USERNAME }}/car-api:latest .
-          docker build -f development/docker/Dockerfile.airflow -t ${{ secrets.DOCKER_USERNAME }}/car-airflow:latest .
+          docker build -f development/docker/Dockerfile.fastapi -t ${{ secrets.DOCKER_USERNAME }}/car-api:latest development/
+          docker build -f development/docker/Dockerfile.airflow -t ${{ secrets.DOCKER_USERNAME }}/car-airflow:latest development/
           docker push ${{ secrets.DOCKER_USERNAME }}/car-api:latest
           docker push ${{ secrets.DOCKER_USERNAME }}/car-airflow:latest
       
