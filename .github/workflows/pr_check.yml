@@ -30,7 +30,7 @@ jobs:
       - name: Auto-fix formatting
         run: |
           autoflake --remove-all-unused-imports --in-place -r development/
-          autopep8 --in-place --recursive --max-line-length=100 development/
+          autopep8 --in-place --recursive development/
           black --line-length 100 development/
 
       - name: Commit & push fixes
@@ -40,7 +40,7 @@ jobs:
 
       - name: Lint verification
         run: |
-          flake8 development/app/api --max-complexity=12 --max-line-length=100
+          flake8 development/app/api --max-complexity=12
 
       - name: Run tests
         run: |

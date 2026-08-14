@@ -49,7 +49,7 @@ jobs:
       - name: Auto-fix formatting and unused imports
         run: |
           autoflake --remove-all-unused-imports --in-place -r development/
-          autopep8 --in-place --recursive --max-line-length=100 development/
+          autopep8 --in-place --recursive development/
           black --line-length 100 development/
       
       - name: Commit & push auto-formatting changes
@@ -61,8 +61,8 @@ jobs:
 
       - name: Lint check with flake8
         run: |
-          flake8 development/app/api --count --max-line-length=100 --max-complexity=12 --statistics
-          flake8 development/orchestration/ --count --max-line-length=100 --max-complexity=12 --statistics
+          flake8 development/app/api --count --max-complexity=12 --statistics
+          flake8 development/orchestration/ --count --max-complexity=12 --statistics
 
       - name: Run tests
         run: |
