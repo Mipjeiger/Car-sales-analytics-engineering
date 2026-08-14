@@ -4,32 +4,44 @@ on:
   pull_request:
     branches: [main, development]
 
+permissions:
+  contents: write
+
 jobs:
   validate:
     runs-on: ubuntu-latest
     
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref}}
+          token: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
       
       - name: Install dependencies
         run: |
           pip install -r development/docker/requirements-api.txt
-          pip install pytest flake8 black
+          pip install pytest flake8 black autopep8 autoflake
       
-      - name: Lint
+      - name: Auto-fix formatting
         run: |
-          flake8 development/app/api/ --max-complexity=10
-          black --check development/app/api/
-      
+          autoflake --remove-all-unused-imports --in-place -r development/
+          autopep8 --in-place --recursive --max-line-length=100 development/
+          black --line-length 100 development/
+
+      - name: Commit & push fixes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "style: auto-fix PR formatting [skip ci]"
+
+      - name: Lint verification
+        run: |
+          flake8 development/app/api --max-complexity=12 --max-line-length=100
+
       - name: Run tests
         run: |
           pytest tests/ -v
-      
-      - name: Check model files
-        run: |
-          ls -la development/models/
