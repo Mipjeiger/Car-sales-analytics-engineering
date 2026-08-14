@@ -5,7 +5,7 @@ Search Routes - FastAPI endpoints for computer vision image search
 import logging
 import os
 import tempfile
-from typing import Annotated, List
+from typing import List
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 from api.services.cv_search import CVSearchService, get_cv_search
@@ -17,31 +17,38 @@ router = APIRouter()
 # ==========================================
 # Schemas
 # ==========================================
+
+
 class SearchResult(BaseModel):
     brand: str
     path: str
     similarity: float = Field(..., ge=0.0, le=1.0)
     rank: int = Field(..., ge=1)
 
+
 class SearchResponse(BaseModel):
     results: List[SearchResult]
     total: int
     query_image: str
 
+
 class BrandsResponse(BaseModel):
     brands: List[str]
     total: int
+
 
 class StatsResponse(BaseModel):
     total_images: int
     feature_dimension: int
     brands: int
 
+
 # ==========================================
 # Endpoints
 # ==========================================
 # Configure allowed extensions for image uploads
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".gif", ".webp"}
+
 
 @router.post(
     "/similar",
@@ -78,8 +85,10 @@ async def search_similar(
         results = cv_service.search_by_image(tmp_path, k)
 
         if not results:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, 
-                                detail=f"❌ No similar cars found matching the query image ({file.filename}).")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"❌ No similar cars found matching the query image ({file.filename}).",
+            )
 
         return SearchResponse(
             results=[SearchResult(**r) for r in results],
@@ -101,6 +110,7 @@ async def search_similar(
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
+
 @router.get(
     "/brands",
     response_model=BrandsResponse,
@@ -119,6 +129,7 @@ async def list_brands(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="❌ Failed to retrieve brand list.",
         ) from exc
+
 
 @router.get(
     "/stats",

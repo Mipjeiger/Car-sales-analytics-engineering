@@ -76,18 +76,10 @@ def quick_start():
     os.chdir(dvc_dir)
 
     subprocess.run(["dvc", "init", "--no-scm", "-f"])
-    subprocess.run(
-        ["dvc", "remote", "add", "minio", f"s3://{s3_bucket}", "-f"]
-    )
-    subprocess.run(
-        ["dvc", "remote", "modify", "minio", "endpointurl", s3_endpoint]
-    )
-    subprocess.run(
-        ["dvc", "remote", "modify", "minio", "access_key_id", access_key]
-    )
-    subprocess.run(
-        ["dvc", "remote", "modify", "minio", "secret_access_key", secret_key]
-    )
+    subprocess.run(["dvc", "remote", "add", "minio", f"s3://{s3_bucket}", "-f"])
+    subprocess.run(["dvc", "remote", "modify", "minio", "endpointurl", s3_endpoint])
+    subprocess.run(["dvc", "remote", "modify", "minio", "access_key_id", access_key])
+    subprocess.run(["dvc", "remote", "modify", "minio", "secret_access_key", secret_key])
     subprocess.run(["dvc", "remote", "default", "minio"])
 
     # 5. Load models to MLflow
@@ -95,12 +87,7 @@ def quick_start():
     subprocess.run(
         [
             sys.executable,
-            str(
-                BASE_DIR
-                / "development"
-                / "mlflow"
-                / "load_existing_models.py"
-            ),
+            str(BASE_DIR / "development" / "mlflow" / "load_existing_models.py"),
         ]
     )
 
@@ -108,12 +95,7 @@ def quick_start():
     subprocess.run(
         [
             sys.executable,
-            str(
-                BASE_DIR
-                / "development"
-                / "pipeline"
-                / "dvc_mlflow_integration.py"
-            ),
+            str(BASE_DIR / "development" / "pipeline" / "dvc_mlflow_integration.py"),
         ]
     )
 

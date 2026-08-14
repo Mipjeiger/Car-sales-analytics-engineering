@@ -115,5 +115,6 @@ class MLflowDVCIntegration:
         self.generate_dvc_yaml()
         print("✨ Done generating configuration!")
 
+
 if __name__ == "__main__":
     MLflowDVCIntegration().run()

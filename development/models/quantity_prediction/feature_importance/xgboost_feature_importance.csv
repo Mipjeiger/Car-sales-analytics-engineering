@@ -1,16 +1,3 @@
-Feature,Importance
-sales,0.37566954
-income_customer,0.34028566
-price,0.13059217
-discount,0.07258298
-price_band,0.062339906
-dealer_region,0.0031289516
-day_of_week,0.0027678055
-company,0.0025177065
-model,0.0021866264
-week_of_year,0.001766183
-dealer_name,0.0015560456
-body_style,0.0015377894
-season,0.0012344872
-color,0.0010805752
-gender,0.00075362675
+version https://git-lfs.github.com/spec/v1
+oid sha256:6f6a7c2b9c73f853c218d8cc058ad8e5e14b0c0e14e35fc9a19d20ceb1421895
+size 349

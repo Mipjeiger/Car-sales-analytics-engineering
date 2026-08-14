@@ -1,19 +1,21 @@
+from PIL import Image
+from torch.utils.data import Dataset
+import torch
 import pandas as pd
 import numpy as np
 import warnings
+
 warnings.filterwarnings("ignore")
 
-import torch
-from torch.utils.data import Dataset
-from PIL import Image
 
 # Configuration
-pd.set_option('display.max_columns', None)
+pd.set_option("display.max_columns", None)
 SEED = 42
 np.random.seed(SEED)
 torch.manual_seed(SEED)
-DEVICE = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
+DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 print(f"Using device: {DEVICE}")
+
 
 class CarDamageDataset(Dataset):
     def __init__(self, image_paths, labels, transform=None):
@@ -31,6 +33,6 @@ class CarDamageDataset(Dataset):
 
         if self.transform:
             augmented = self.transform(image=image)
-            image = augmented['image']
+            image = augmented["image"]
 
         return image, torch.tensor(label, dtype=torch.long)

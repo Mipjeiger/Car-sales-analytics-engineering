@@ -18,9 +18,9 @@ class MLflowModelLoader:
         # Resolve directory hierarchy dynamically relative to this script
         # Script location: development/mlflow/load_existing_models.py
         self.SCRIPT_DIR = Path(__file__).resolve().parent  # development/mlflow
-        self.DEV_DIR = self.SCRIPT_DIR.parent               # development
-        self.BASE_DIR = self.DEV_DIR.parent                # project root (Car_Sales)
-        
+        self.DEV_DIR = self.SCRIPT_DIR.parent  # development
+        self.BASE_DIR = self.DEV_DIR.parent  # project root (Car_Sales)
+
         self.MODELS_DIR = self.DEV_DIR / "models"
         if not self.MODELS_DIR.exists():
             self.MODELS_DIR = self.BASE_DIR / "models"  # Fallback to project root models dir
@@ -34,12 +34,16 @@ class MLflowModelLoader:
             load_dotenv(dotenv_path=env_path)
             print(f"🔑 Loaded environment variables from: {env_path}")
         else:
-            print(f"⚠️ Warning: .env file not found at {env_path}. Using environment/default fallbacks.")
+            print(
+                f"⚠️ Warning: .env file not found at {env_path}. Using environment/default fallbacks."
+            )
 
         # Set S3 / MinIO environment variables for MLflow artifact logging
         os.environ["AWS_ACCESS_KEY_ID"] = os.getenv("AWS_ACCESS_KEY_ID", "minioadmin")
         os.environ["AWS_SECRET_ACCESS_KEY"] = os.getenv("AWS_SECRET_ACCESS_KEY", "minioadmin")
-        os.environ["MLFLOW_S3_ENDPOINT_URL"] = os.getenv("MLFLOW_S3_ENDPOINT_URL", "http://localhost:9000")
+        os.environ["MLFLOW_S3_ENDPOINT_URL"] = os.getenv(
+            "MLFLOW_S3_ENDPOINT_URL", "http://localhost:9000"
+        )
 
         # Set Tracking URI from .env or fallback
         tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5003")
@@ -79,6 +83,7 @@ class MLflowModelLoader:
                 with mlflow.start_run(run_name=f"{model_name}") as run:
                     if model_name == "CatBoost":
                         from catboost import CatBoostRegressor
+
                         model = CatBoostRegressor()
                         model.load_model(model_path)
                     else:
@@ -91,13 +96,19 @@ class MLflowModelLoader:
                     else:
                         mlflow.log_artifact(str(model_path), artifact_path=artifact_subpath)
 
-                    mlflow.log_metrics({
-                        "R2": float(row.get("R2", 0)),
-                        "RMSE": float(row.get("RMSE", 0)),
-                        "MAE": float(row.get("MAE", 0)),
-                    })
+                    mlflow.log_metrics(
+                        {
+                            "R2": float(row.get("R2", 0)),
+                            "RMSE": float(row.get("RMSE", 0)),
+                            "MAE": float(row.get("MAE", 0)),
+                        }
+                    )
 
-                    params_file = sales_dir / "parameters" / f"{model_name.lower().replace(' ', '_')}_best_params.json"
+                    params_file = (
+                        sales_dir
+                        / "parameters"
+                        / f"{model_name.lower().replace(' ', '_')}_best_params.json"
+                    )
                     if params_file.exists():
                         with open(params_file, "r") as f:
                             mlflow.log_params(json.load(f))
@@ -146,6 +157,7 @@ class MLflowModelLoader:
                 with mlflow.start_run(run_name=f"quantity_{model_name}") as run:
                     if model_name == "CatBoost":
                         from catboost import CatBoostRegressor
+
                         model = CatBoostRegressor()
                         model.load_model(model_path)
                     else:
@@ -158,13 +170,19 @@ class MLflowModelLoader:
                     else:
                         mlflow.log_artifact(str(model_path), artifact_path=artifact_subpath)
 
-                    mlflow.log_metrics({
-                        "R2": float(row.get("R2", 0)),
-                        "RMSE": float(row.get("RMSE", 0)),
-                        "MAE": float(row.get("MAE", 0)),
-                    })
+                    mlflow.log_metrics(
+                        {
+                            "R2": float(row.get("R2", 0)),
+                            "RMSE": float(row.get("RMSE", 0)),
+                            "MAE": float(row.get("MAE", 0)),
+                        }
+                    )
 
-                    params_file = qty_dir / "parameters" / f"{model_name.lower().replace(' ', '_')}_best_params.json"
+                    params_file = (
+                        qty_dir
+                        / "parameters"
+                        / f"{model_name.lower().replace(' ', '_')}_best_params.json"
+                    )
                     if params_file.exists():
                         with open(params_file, "r") as f:
                             mlflow.log_params(json.load(f))
@@ -204,10 +222,12 @@ class MLflowModelLoader:
                 if metadata_path.exists():
                     with open(metadata_path, "r") as f:
                         metadata = json.load(f)
-                        mlflow.log_params({
-                            "num_images": metadata.get("num_images", 0),
-                            "feature_dimension": metadata.get("feature_dimension", 0),
-                        })
+                        mlflow.log_params(
+                            {
+                                "num_images": metadata.get("num_images", 0),
+                                "feature_dimension": metadata.get("feature_dimension", 0),
+                            }
+                        )
 
                 for file in ["feature_data.csv", "feature_matrix.npy", "brand_mapping.json"]:
                     file_path = cv_dir / file

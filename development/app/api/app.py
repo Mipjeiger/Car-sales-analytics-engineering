@@ -27,6 +27,7 @@ app.include_router(predict.router, prefix="/predict", tags=["Prediction"])
 app.include_router(chat.router, prefix="/chat", tags=["Chatbot"])
 app.include_router(search.router, prefix="/search", tags=["Search"])
 
+
 @app.get("/health")
 def health_check():
     return {
@@ -37,15 +38,18 @@ def health_check():
         "message": "Welcome to the Car Sales Intelligence API!",
     }
 
+
 @app.get("/metrics")
 async def metrics():
     """Prometheus scraping endpoint"""
     return Response(content=get_metrics(), media_type="text/plain")
 
+
 @app.get("/business-metrics")
 async def business_metrics():
     """Business metrics JSON endpoint"""
     return get_business_metrics(format_type="json")
+
 
 if __name__ == "__main__":
     uvicorn.run("api.app:app", host="0.0.0.0", port=8000, reload=False)
