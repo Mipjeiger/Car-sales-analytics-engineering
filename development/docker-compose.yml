@@ -72,37 +72,6 @@ services:
     networks:
       - car_analytics_network
 
-  dagster:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.dagster
-    container_name: dagster_car_analytics
-    ports:
-      - "3003:3000"
-    environment:
-      - DAGSTER_HOME=/app/dagster_home
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_HOST=postgres
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
-    volumes:
-      - ./dagster_home:/app/dagster_home
-      - .:/app
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    depends_on:
-      postgres:
-        condition: service_healthy
-      mlflow:
-        condition: service_healthy
-    networks:
-      - car_analytics_network
-
   fastapi:
     build:
       context: .
@@ -120,10 +89,10 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
       - MLFLOW_TRACKING_URI=http://mlflow:5000
-      - PYTHONPATH=/app:/app/app  # Build context is development/, so app/ lands at /app/app/
+      - PYTHONPATH=/app:/app/app  
       - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc
     volumes:
-      - .:/app  # Mount for development (hot reload)
+      - .:/app 
       - ./tmp/prometheus_multiproc:/tmp/prometheus_multiproc
       #- ~/.cache/torch:/root/.cache/torch # Caching torch models to avoid re-downloading
     depends_on:
@@ -134,30 +103,32 @@ services:
     networks:
       - car_analytics_network
 
-  zookeeper:
-    image: confluentinc/cp-zookeeper:latest
-    container_name: zookeeper_car_analytics
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-    ports:
-      - "2181:2181"
-    networks:
-      - car_analytics_network
-
   kafka:
-    image: confluentinc/cp-kafka:latest
+    image: confluentinc/cp-kafka:7.6.0
     container_name: kafka_car_analytics
-    depends_on:
-      - zookeeper
     ports:
       - "9092:9092"
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka_car_analytics:29093'
+      
+      # Listeners & Security Protocols
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka_car_analytics:29092,PLAINTEXT_HOST://localhost:9092'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      
+      # Single-node Development Settings
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-    volumes:
-      - ./kafka/config:/etc/kafka
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      
+      # Pre-generated Base64 Cluster ID for automatic formatting
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
     networks:
       - car_analytics_network
 
@@ -171,6 +142,119 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
     depends_on:
       - kafka
+    networks:
+      - car_analytics_network
+
+  airflow-postgres:
+    image: postgres:15-alpine
+    container_name: airflow_postgres_car_analytics
+    environment:
+      POSTGRES_USER: ${POSTGRES_AIRFLOW_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_AIRFLOW_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_AIRFLOW_DB}
+    volumes:
+      - ./airflow-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_AIRFLOW_USER} -d ${POSTGRES_AIRFLOW_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - car_analytics_network
+
+  airflow-init:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.airflow
+    image: car_analytics_airflow:2.9.0
+    container_name: airflow_init_car_analytics
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username admin \
+          --password admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email cubudida@gmail.com
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_AIRFLOW_USER}:${POSTGRES_AIRFLOW_PASSWORD}@airflow-postgres:5432/${POSTGRES_AIRFLOW_DB}
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    networks:
+      - car_analytics_network
+
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.airflow
+    image: car_analytics_airflow:2.9.0
+    container_name: airflow_webserver_car_analytics
+    command: webserver
+    ports:
+      - "8080:8080"
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_AIRFLOW_USER}:${POSTGRES_AIRFLOW_PASSWORD}@airflow-postgres:5432/${POSTGRES_AIRFLOW_DB}
+      - AIRFLOW__WEBSERVER__DAG_DEFAULT_VIEW=graph
+      - AIRFLOW__WEBSERVER__NAVBAR_COLOR=#1a1a2e
+      - AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL=30
+      - AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL=10
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__SCHEDULER__USE_JOB_SCHEDULE=False # Disable scheduled jobs
+      - PYTHONPATH=/opt/airflow:/app
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - .:/app
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    networks:
+      - car_analytics_network
+
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.airflow
+    image: car_analytics_airflow:2.9.0
+    container_name: airflow_scheduler_car_analytics
+    command: scheduler
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_AIRFLOW_USER}:${POSTGRES_AIRFLOW_PASSWORD}@airflow-postgres:5432/${POSTGRES_AIRFLOW_DB}
+      - AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL=30
+      - AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL=10
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__SCHEDULER__USE_JOB_SCHEDULE=False # Disable scheduled jobs
+      - PYTHONPATH=/opt/airflow:/app
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - .:/app
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
     networks:
       - car_analytics_network
 
@@ -210,6 +294,7 @@ volumes:
   pgdata:
   prometheus-data:
   grafana-data:
+  airflow-postgres-data:
 
 networks:
   car_analytics_network:

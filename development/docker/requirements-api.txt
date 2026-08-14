@@ -19,11 +19,6 @@ torch==2.5.1
 torchvision==0.20.1
 faiss-cpu==1.9.0
 
-# Orchestration
-dagster==1.10.2
-dagster-webserver==1.10.2
-dagster-postgres
-
 # Storage
 boto3==1.35.76
 
