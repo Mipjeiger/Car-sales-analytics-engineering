@@ -24,17 +24,18 @@ jobs:
           docker push ${{ secrets.DOCKER_USERNAME }}/car-api:latest
           docker push ${{ secrets.DOCKER_USERNAME }}/car-airflow:latest
       
-      - name: Deploy to server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            cd /opt/car_sales
-            docker-compose pull
-            docker-compose up -d --force-recreate
-            docker system prune -f
+      # Later i add server deployment if already have
+      #- name: Deploy to server
+      #  uses: appleboy/ssh-action@v1.0.3
+      #  with:
+      #    host: ${{ secrets.SERVER_HOST }}
+      #    username: ${{ secrets.SERVER_USER }}
+      #    key: ${{ secrets.SERVER_SSH_KEY }}
+      #    script: |
+      #      cd /opt/car_sales
+      #      docker-compose pull
+      #      docker-compose up -d --force-recreate
+      #      docker system prune -f
       
       - name: Notify Slack
         uses: 8398a7/action-slack@v3
