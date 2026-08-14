@@ -23,7 +23,8 @@ class MLflowModelLoader:
 
         self.MODELS_DIR = self.DEV_DIR / "models"
         if not self.MODELS_DIR.exists():
-            self.MODELS_DIR = self.BASE_DIR / "models"  # Fallback to project root models dir
+            # Fallback to project root models dir
+            self.MODELS_DIR = self.BASE_DIR / "models"
 
         self.MLFLOW_DIR = self.DEV_DIR / "mlflow"
         self.MLFLOW_DIR.mkdir(exist_ok=True)
