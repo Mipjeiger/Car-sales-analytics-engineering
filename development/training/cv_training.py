@@ -11,6 +11,7 @@ import io
 import boto3
 from botocore.client import Config
 from tqdm import tqdm
+import faiss
 import os
 import logging
 
@@ -75,3 +76,92 @@ class CVTrainer:
         with torch.no_grad():
             features = self.model(tensor)
         return features.squeeze().cpu().numpy()
+
+    def save_to_minio(self, data, key):
+        """Save data to MinIO"""
+        if isinstance(data, faiss.Index):
+            # FAISS index
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix='.faiss', delete=False) as tmp:
+                faiss.write_index(data, tmp.name)
+                with open(tmp.name, 'rb') as f:
+                    self.s3.put_object(Bucket=BUCKET_NAME, Key=key, Body=f.read())
+                os.unlink(tmp.name)
+
+        elif isinstance(data, dict):
+            # JSON
+            self.s3.put_object(Bucket=BUCKET_NAME, Key=key, Body=json.dumps(data, indent=2))
+
+        elif isinstance(data, pd.DataFrame):
+            # CSV
+            csv_buffer = io.StringIO()
+            data.to_csv(csv_buffer, index=False)
+            self.s3.put_object(Bucket=BUCKET_NAME, Key=key, Body=csv_buffer.getvalue())
+
+        elif isinstance(data, np.ndarray):
+            # Numpy
+            npy_buffer = io.BytesIO()
+            np.save(npy_buffer, data)
+            self.s3.put_object(Bucket=BUCKET_NAME, Key=key, Body=npy_buffer.getvalue())
+
+        logger.info(f"✅ Saved {key} to MinIO bucket {BUCKET_NAME}")
+
+    def train(self):
+        """Extract features and build FAISS index"""
+        logger.info("🚀 Starting CV training...")
+
+        image_paths = []
+        labels = []
+        features = []
+
+        # Process training images
+        train_dir = DATA_DIR / 'train'
+        for brand in tqdm(train_dir.iterdir(), desc="Processing images"):
+            if brand.is_dir():
+                for img_path in brand.glob('*.jpg'):
+                    try:
+                        feat = self.extract_features(img_path)
+                        features.append(feat)
+                        labels.append(brand.name)
+                        image_paths.append(str(img_path))
+                    except Exception as e:
+                        logger.error(f"Error processing {img_path}: {e}")
+
+        # Convert to numpy arrays
+        feature_matrix = np.array(features)
+
+        # Normalize features
+        norms = np.linalg.norm(feature_matrix, axis=1, keepdims=True)
+        feature_matrix = feature_matrix / (norms + 1e-8)
+
+        # Build FAISS index
+        dimension = feature_matrix.shape[1]
+        index = faiss.IndexFlatIP(dimension)
+        index.add(feature_matrix.astype(np.float32))
+
+        # Save to MinIO
+        self.save_to_minio(index, 'computer_vision/faiss_index.faiss')
+
+        # Save metadata
+        metadata = {
+            'num_images': len(feature_matrix),
+            'feature_dimension': dimension,
+            'brands': list(set(labels))
+        }
+        self.save_to_minio(metadata, 'computer_vision/metadata.json')
+
+        # Save feature data
+        df = pd.DataFrame({'path': image_paths, 'brand': labels})
+        self.save_to_minio(df, 'computer_vision/feature_data.csv')
+
+        # Save feature matrix
+        self.save_to_minio(feature_matrix, 'computer_vision/feature_matrix.npy')
+
+        logger.info("✅ CV training completed and artifacts saved to MinIO.")
+        logger.info(f" Images: {len(feature_matrix)}")
+        logger.info(f" Brands: {len(set(labels))}")
+        logger.info(f" Feature Dimension: {dimension}")
+
+if __name__ == "__main__":
+    trainer = CVTrainer()
+    trainer.train()
