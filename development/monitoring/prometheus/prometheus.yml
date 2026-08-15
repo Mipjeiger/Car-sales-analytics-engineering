@@ -1,17 +1,6 @@
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
-  external_labels:
-    project: "car_sales"
-    environment: "development"
-
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets: []
-
-rule_files:
-  - "alerts.yml"
 
 scrape_configs:
   # FastAPI metrics
@@ -21,39 +10,20 @@ scrape_configs:
     metrics_path: "/metrics"
     scrape_interval: 10s
 
+  # Docker/cAdvisor metrics
+  - job_name: "docker"
+    static_configs:
+      - targets: ["cadvisor:8080"]
+    scrape_interval: 15s
+
   # MLflow metrics
   - job_name: "mlflow"
     static_configs:
       - targets: ["mlflow:5000"]
     scrape_interval: 15s
 
-  # PostgreSQL metrics (via postgres_exporter)
+  # PostgreSQL metrics
   - job_name: "postgresql"
     static_configs:
       - targets: ["postgres_exporter:9187"]
     scrape_interval: 15s
-
-  # System metrics (via node_exporter)
-  - job_name: "system"
-    static_configs:
-      - targets: ["node_exporter:9100"]
-    scrape_interval: 15s
-
-  # Dagster metrics
-  - job_name: "dagster"
-    static_configs:
-      - targets: ["dagster:3000"]
-    scrape_interval: 15s
-
-  # MinIO metrics
-  - job_name: "minio"
-    metrics_path: /minio/v2/metrics/cluster
-    static_configs:
-      - targets: ["minio:9000"]
-    scrape_interval: 15s
-
-  # Custom application metrics
-  - job_name: "car_api_metrics"
-    static_configs:
-      - targets: ["fastapi:8001"]
-    scrape_interval: 10s
