@@ -21,7 +21,7 @@ jobs:
       
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          pip install -r development/docker/requirements-api.txt
           pip install dvc
       
       - name: Configure storage

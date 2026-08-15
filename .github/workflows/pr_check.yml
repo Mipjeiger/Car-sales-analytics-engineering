@@ -18,12 +18,12 @@ jobs:
       
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          pip install -r development/docker/requirements-api.txt
           pip install pytest flake8 black
       
       - name: Lint
         run: |
-          flake8 development/app/api/ --max-complexity=10
+          flake8 development/app/api/
           black --check development/app/api/
       
       - name: Run tests

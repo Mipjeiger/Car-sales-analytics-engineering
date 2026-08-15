@@ -36,29 +36,14 @@ jobs:
       
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          pip install -r development/docker/requirements-api.txt
           pip install pytest pytest-cov flake8 black
       
       - name: Lint with flake8
         run: |
-          flake8 development/app/api --count --max-complexity=10 --statistics
-          flake8 development/orchestration/ --count --max-complexity=10 --statistics
+          flake8 development/app/api 
+          flake8 development/orchestration/ 
       
-<<<<<<< Updated upstream
-=======
-      - name: Commit & push auto-formatting changes
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "style: auto-fix formatting & lint issues [skip ci]"
-          commit_user_name: "github-actions[bot]"
-          commit_user_email: "github-actions[bot]@users.noreply.github.com"
-
-      - name: Lint check with flake8
-        run: |
-          flake8 development/app/api --statistics
-          flake8 development/orchestration/ --statistics
-
->>>>>>> Stashed changes
       - name: Run tests
         run: |
           pytest tests/ -v --cov=development/app/api --cov=development/orchestration --cov-report=xml

@@ -9,3 +9,4 @@ development/data_science/catboost_info
 development/dagster_home
 development/database/transfering_data_to_sql.py
 development/airflow-postgres-data
+development/airflow/logs/
