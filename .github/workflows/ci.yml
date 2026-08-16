@@ -6,10 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-# Grant write permissions to allow pushing auto-formatted code back to the repository
-permissions:
-  contents: write
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -31,9 +27,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref}}
-          token: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -41,29 +34,16 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
       
-      - name: Install dependencies & formatters
+      - name: Install dependencies
         run: |
           pip install -r development/docker/requirements-api.txt
-          pip install pytest pytest-cov flake8 black autopep8 autoflake
+          pip install pytest pytest-cov flake8 black
       
-      - name: Auto-fix formatting and unused imports
+      - name: Lint with flake8
         run: |
-          autoflake --remove-all-unused-imports --in-place -r development/
-          autopep8 --in-place --recursive development/
-          black --line-length 100 development/
+          flake8 development/app/api 
+          flake8 development/orchestration/ 
       
-      - name: Commit & push auto-formatting changes
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "style: auto-fix formatting & lint issues [skip ci]"
-          commit_user_name: "github-actions[bot]"
-          commit_user_email: "github-actions[bot]@users.noreply.github.com"
-
-      - name: Lint check with flake8
-        run: |
-          flake8 development/app/api --count --max-complexity=12 --statistics
-          flake8 development/orchestration/ --count --max-complexity=12 --statistics
-
       - name: Run tests
         run: |
           pytest tests/ -v --cov=development/app/api --cov=development/orchestration --cov-report=xml
@@ -72,7 +52,7 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           file: ./coverage.xml
-          fail_ci_if_error: false # Prevent failure if codecov token is unset or upload fails
+          fail_ci_if_error: true
 
   build:
     runs-on: ubuntu-latest
