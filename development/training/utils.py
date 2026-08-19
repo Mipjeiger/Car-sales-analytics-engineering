@@ -20,7 +20,6 @@ MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
 BUCKET_NAME = "mlflow-artifacts"
 
-
 def get_minio_client():
     """Get MinIO/S3 client"""
     return boto3.client(
@@ -32,11 +31,9 @@ def get_minio_client():
         region_name="us-east-1",
     )
 
-
 def load_data():
     """Load sales data"""
     return pd.read_parquet(DATA_PATH)
-
 
 def prepare_features(df, target="sales"):
     """Prepare features for training"""
@@ -54,11 +51,26 @@ def prepare_features(df, target="sales"):
         "model",
         "price_band",
     ]
-    X = df[features]
+    X = df[features].copy()
     y = df[target]
+
+    X, encoders = encoding_categorical_features(X)
 
     return X, y
 
+def encoding_categorical_features(X):
+    """Encode categorical features using label encoding"""
+    from sklearn.preprocessing import LabelEncoder
+
+    categorical_features = ["model", "price_band", "season"]
+    encoders = {}
+
+    for feature in categorical_features:
+        le = LabelEncoder()
+        X[feature] = le.fit_transform(X[feature])
+        encoders[feature] = le
+
+    return X, encoders
 
 def save_model_to_minio(model, model_name, model_type="sales"):
     """Save model to MinIO isntead of local storage"""
@@ -113,7 +125,6 @@ def save_model_to_minio(model, model_name, model_type="sales"):
     print(f"✅ Saved {model_name} to MinIO: {key}")
     return metadata
 
-
 def load_model_from_minio(model_name, model_type="sales"):
     """Load model from MinIO"""
     s3 = get_minio_client()
@@ -140,7 +151,6 @@ def load_model_from_minio(model_name, model_type="sales"):
 
     return model
 
-
 def save_metrics_to_minio(metrics_df, model_type="sales"):
     """Save training metrics to MinIO"""
     s3 = get_minio_client()
@@ -152,7 +162,6 @@ def save_metrics_to_minio(metrics_df, model_type="sales"):
     s3.put_object(Bucket=BUCKET_NAME, Key=key, Body=csv_buffer.getvalue())
 
     print(f"✅ Saved metrics to MinIO: {key}")
-
 
 def load_metrics_from_minio(model_type="sales"):
     """Load metrics from MinIO"""
@@ -166,16 +175,15 @@ def load_metrics_from_minio(model_type="sales"):
     except:
         return None
 
-
 def list_models_from_minio():
     """List all models in MinIO"""
     s3 = get_minio_client()
 
     models = []
-    for prefir in ["sales_prediction/models/", "quantity_prediction/models/"]:
-        response = s3.list_objects_v2(Bucket=BUCKET_NAME, Prefix=prefir)
+    for prefix in ["sales_prediction/models/", "quantity_prediction/models/"]:
+        response = s3.list_objects_v2(Bucket=BUCKET_NAME, Prefix=prefix)
         for obj in response.get("Contents", []):
-            if obj["Key"].endswith(".pkl", ".cbm"):
+            if obj["Key"].endswith((".pkl", ".cbm")):
                 models.append(
                     {
                         "path": obj["Key"],
