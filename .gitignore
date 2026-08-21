@@ -11,3 +11,4 @@ development/database/transfering_data_to_sql.py
 development/airflow-postgres-data
 development/airflow/logs/.DS_Store
 development/airflow/logs/*
+development/tmp

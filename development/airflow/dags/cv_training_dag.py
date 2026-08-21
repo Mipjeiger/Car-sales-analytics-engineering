@@ -14,14 +14,13 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parents[2]
 sys.path.append(str(BASE_DIR))
 
-
 default_args = {
     "owner": "cv_engineer",
     "depends_on_past": False,
     "start_date": datetime(2022, 1, 1),
     "email_on_failure": True,
     "email_on_retry": False,
-    "retries": 2,
+    "retries": 1,
     "retry_delay": timedelta(minutes=5),
 }
 
@@ -31,16 +30,15 @@ dag = DAG(
     description="Train CV models for car sales prediction - Manual trigger only",
     schedule=None,  # No automatic schedule
     catchup=False,
+    is_paused_upon_creation=False,
     tags=["cv", "training", "car_sales"],
 )
-
 
 def run_cv_training():
     """Run CV training"""
     logger.info("🚀 Starting CV training...")
     trainer = CVTrainer()
     trainer.run()
-
 
 def validate_cv_model():
     """Validate CV model in MinIO"""
@@ -62,7 +60,6 @@ def validate_cv_model():
         logger.info("✅ CV model validated in MinIO")
     except:
         raise ValueError("❌ CV model not found in MinIO")
-
 
 def register_cv_to_mlflow():
     """Load CV model from MinIO to MLflow"""
