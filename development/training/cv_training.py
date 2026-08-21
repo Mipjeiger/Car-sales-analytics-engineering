@@ -29,7 +29,6 @@ MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
 BUCKET_NAME = "mlflow-artifacts"
 
-
 def get_minio_client():
     return boto3.client(
         "s3",
@@ -39,7 +38,6 @@ def get_minio_client():
         config=Config(signature_version="s3v4"),
         region_name="us-east-1",
     )
-
 
 class CVTrainer:
     """
@@ -122,19 +120,30 @@ class CVTrainer:
 
         # Process training images
         train_dir = DATA_DIR / "train"
+        all_images = []
         for brand in tqdm(train_dir.iterdir(), desc="Processing images"):
             if brand.is_dir():
-                for img_path in brand.glob("*.jpg"):
-                    try:
-                        feat = self.extract_features(img_path)
-                        features.append(feat)
-                        labels.append(brand.name)
-                        image_paths.append(str(img_path))
-                    except Exception as e:
-                        logger.error(f"Error processing {img_path}: {e}")
+                all_images.extend([(brand.name, p) for p in brand.glob("*.jpg")])
+
+        if not all_images:
+                raise RuntimeError(f"No images found in {train_dir}. Please check the dataset path.")
+
+        progress = tqdm(all_images, desc="Procesing images", disable=not os.isatty(1))
+
+        for brand_name, img_path in progress:
+            try:
+                feat = self.extract_features(img_path)
+                features.append(feat)
+                labels.append(brand_name)
+                image_paths.append(str(img_path))
+            except Exception as e:
+                logger.error(f"Error processing {img_path}: {e}")
+
+        if not features:
+            raise RuntimeError("No features extracted. Please check the dataset and model.")
 
         # Convert to numpy arrays
-        feature_matrix = np.array(features)
+        feature_matrix = np.array(features, dtype=np.float32)
 
         # Normalize features
         norms = np.linalg.norm(feature_matrix, axis=1, keepdims=True)

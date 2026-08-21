@@ -1,10 +1,10 @@
-from training.cv_training import CVTrainer
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
 import sys
 import logging
 from pathlib import Path
+from training.cv_training import CVTrainer
 
 # Logging configuration
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -38,7 +38,7 @@ def run_cv_training():
     """Run CV training"""
     logger.info("🚀 Starting CV training...")
     trainer = CVTrainer()
-    trainer.run()
+    trainer.train()
 
 def validate_cv_model():
     """Validate CV model in MinIO"""
@@ -61,19 +61,29 @@ def validate_cv_model():
     except:
         raise ValueError("❌ CV model not found in MinIO")
 
-def register_cv_to_mlflow():
+def register_cv_mlflow():
     """Load CV model from MinIO to MLflow"""
-    from mlflow.load_existing_models import MLflowModelLoader
-
+    from mlflow_utils.load_existing_models import MLflowModelLoader
     loader = MLflowModelLoader()
     loader.load_cv_model()
 
+t1 = PythonOperator(
+    task_id="run_cv_training",
+    python_callable=run_cv_training,
+    dag=dag,
+)
 
-t1 = PythonOperator(task_id="run_cv_training", python_callable=run_cv_training, dag=dag)
+t2 = PythonOperator(
+    task_id="validate_cv_model",
+    python_callable=validate_cv_model,
+    dag=dag,
+)
 
-t2 = PythonOperator(task_id="validate_cv_model", python_callable=validate_cv_model, dag=dag)
+t3 = PythonOperator(
+    task_id="register_cv_mlflow",
+    python_callable=register_cv_mlflow,
+    dag=dag,
+)
 
-t3 = PythonOperator(task_id="register_cv_mlflow", python_callable=register_cv_to_mlflow, dag=dag)
-
-# Task dependencies
+# Define task dependencies
 t1 >> t2 >> t3
