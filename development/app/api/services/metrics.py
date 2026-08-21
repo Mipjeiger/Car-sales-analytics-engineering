@@ -20,7 +20,17 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from pathlib import Path
 import time
 import os
+import logging
 from functools import wraps
+from dotenv import load_dotenv
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+
+# Define base directory
+BASE_DIR = Path(__file__).resolve().parents[3]
+ENV_DIR = BASE_DIR / ".env"
+load_dotenv(dotenv_path=ENV_DIR)
 
 # ==========================================
 # Request metrics
@@ -88,17 +98,54 @@ BUSINESS_KPI_METRICS = Gauge(
 )
 
 # ===========================================
+# AIRFLOW METRICS
+# ===========================================
+AIRFLOW_DAG_STATUS = Gauge(
+    "airflow_dag_status",
+    "Airflow DAG status (1=running, 0=success, -1=failed)",
+    ["dag_id", "task_id"],
+)
+
+AIRFLOW_DAG_DURATION = Histogram(
+    "airflow_dag_duration_seconds",
+    "Airflow DAG execution duration",
+    ["dag_id"],
+    buckets=(10, 30, 60, 120, 300, 600, 1800, 3600)
+)
+
+AIRFLOW_TASK_DURATION = Histogram(
+    "airflow_task_duration_seconds",
+    "Airflow task execution duration",
+    ["dag_id", "task_id"],
+    buckets=(5, 10, 30, 60, 120, 300, 600)
+)
+
+AIRFLOW_DAG_RUNS = Counter(
+    "airflow_dag_runs_total",
+    "Total Airflow DAG runs",
+    ["dag_id", "status"],
+)
+
+AIRFLOW_TASKS = Counter(
+    "airflow_tasks_total",
+    "Total Airflow tasks executed",
+    ["dag_id", "task_id", "status"],
+)
+
+AIRFLOW_SCHEDULER_HEARTBEAT = Gauge(
+    "airflow_scheduler_heartbeat",
+    "Airflow scheduler heartbeat timestamp",
+)
+
+# ===========================================
 # MIDDLEWARE CLASS
 # ===========================================
-
-
 class PrometheusMiddleware(BaseHTTPMiddleware):
     """Middleware to automatically track HTTP request counts and latencies"""
 
     async def dispatch(self, request: Request, call_next):
         endpoint = request.url.path
 
-        # Skip tracking internal monitoring/documentation endpoints
         """Important to avoid unnecessary metrics noise for Prometheus scraping"""
         EXCLUDE_PATHS = {"/metrics", "/docs", "/openapi.json", "/redoc"}
 
@@ -123,12 +170,9 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
             REQUEST_COUNT.labels(method=method, endpoint=endpoint, status=status_code).inc()
             REQUEST_LATENCY.labels(method=method, endpoint=endpoint).observe(duration)
 
-
 # ============================================
 # HELPER FUNCTIONS
 # ============================================
-
-
 def update_business_metrics():
     """Update business metrics from dataset"""
     try:
@@ -141,9 +185,7 @@ def update_business_metrics():
 
             # Integrate metrics to Dataframe to enchance business insights
             BUSINESS_REVENUE_IMPACT.set(float(df["sales"].sum()) if "sales" in df.columns else 0)
-            BUSINESS_ACTIVE_USERS.set(
-                float(df["customer_name"].nunique()) if "customer_name" in df.columns else 0
-            )
+            BUSINESS_ACTIVE_USERS.set(float(df["customer_name"].nunique()) if "customer_name" in df.columns else 0)
 
             # Update KPIs
             if "sales" in df.columns:
@@ -151,21 +193,67 @@ def update_business_metrics():
             if "profit" in df.columns:
                 BUSINESS_KPI_METRICS.labels(kpi_name="total_profit").set(float(df["profit"].sum()))
             if "quantity" in df.columns:
-                BUSINESS_KPI_METRICS.labels(kpi_name="total_quantity").set(
-                    float(df["quantity"].sum())
-                )
+                BUSINESS_KPI_METRICS.labels(kpi_name="total_quantity").set(float(df["quantity"].sum()))
             if "profit_margin" in df.columns:
-                BUSINESS_KPI_METRICS.labels(kpi_name="profit_margin").set(
-                    float(df["profit_margin"].mean())
-                )
+                BUSINESS_KPI_METRICS.labels(kpi_name="profit_margin").set(float(df["profit_margin"].mean()))
 
             return True
 
     except Exception as e:
-        print(f"Error updating business metrics: {e}")
+        logger.error(f"❌ Error updating business metrics: {e}")
 
     return False
 
+def update_airflow_metrics():
+    """Update Airflow metrics from database using psycopg (v3)"""
+    import os
+    import time
+    import psycopg
+
+    try:
+        # Construct connection string or pass kwargs directly
+        conn_info = (
+            f"host={os.getenv('POSTGRES_AIRFLOW_HOST')} "
+            f"dbname={os.getenv('POSTGRES_AIRFLOW_DB')} "
+            f"user={os.getenv('POSTGRES_AIRFLOW_USER')} "
+            f"password={os.getenv('POSTGRES_AIRFLOW_PASSWORD')}"
+        )
+
+        # Context manager automatically handles closing connections and cursors ⚡
+        with psycopg.connect(conn_info) as conn:
+            with conn.cursor() as cur:
+                # Get DAG status
+                cur.execute("""
+                    SELECT dag_id, state, COUNT(*)
+                    FROM dag_run
+                    WHERE state IN ('running', 'success', 'failed')
+                    GROUP BY dag_id, state
+                """)
+                for dag_id, state, count in cur.fetchall():
+                    status_value = 1 if state == 'running' else (0 if state == 'success' else -1)
+                    AIRFLOW_DAG_STATUS.labels(dag_id=dag_id, task_id='all').set(status_value)
+                    AIRFLOW_DAG_RUNS.labels(dag_id=dag_id, status=state).inc(count)
+
+                # Get task status
+                cur.execute("""
+                    SELECT dag_id, task_id, state, COUNT(*)
+                    FROM task_instance
+                    WHERE state IN ('success', 'failed')
+                    GROUP BY dag_id, task_id, state
+                """)
+                for dag_id, task_id, state, count in cur.fetchall():
+                    AIRFLOW_TASKS.labels(
+                        dag_id=dag_id,
+                        task_id=task_id,
+                        status=state
+                    ).inc(count)
+
+                # Update scheduler heartbeat
+                cur.execute("SELECT NOW()")
+                AIRFLOW_SCHEDULER_HEARTBEAT.set(time.time())
+
+    except Exception as e:
+        logger.error(f"❌ Error updating Airflow metrics: {e}")
 
 def track_request(endpoint):
     """Decorator to track request metrics"""
@@ -186,14 +274,10 @@ def track_request(endpoint):
                 raise
 
             finally:
-                REQUEST_LATENCY.labels(method=method, endpoint=endpoint).observe(
-                    time.perf_counter() - start
-                )
+                REQUEST_LATENCY.labels(method=method, endpoint=endpoint).observe(time.perf_counter() - start)
 
         return wrapper
-
     return decorator
-
 
 def track_prediction(model_type, model_name):
     """Decorator to track prediction metrics"""
@@ -208,7 +292,7 @@ def track_prediction(model_type, model_name):
             PREDICTION_COUNT.labels(model_type=model_type, model_name=model_name).inc()
             PREDICTION_LATENCY.labels(model_type=model_type).observe(time.perf_counter() - start)
 
-            # Extract value wheter result is a Pydantic model or a dict
+            # Extract value whether result is a Pydantic model or a dict
             pred_val = None
             if hasattr(result, "prediction"):
                 pred_val = result.prediction
@@ -221,30 +305,28 @@ def track_prediction(model_type, model_name):
                 )
 
             return result
-
         return wrapper
-
     return decorator
-
 
 def get_metrics():
     """Generates Prometheus metrics output for multiprocess/single-process setups."""
+    # Update metrics before returning
+    update_business_metrics()
+    update_airflow_metrics()
+
     registry = CollectorRegistry()
 
     if "PROMETHEUS_MULTIPROC_DIR" in os.environ:
-        # Collect custom worker metrics
-        multiprocess.MultiProcessCollector(registry)
 
-        # Attach process, GC, and python runtime metrics
+        # Collect custom worker & attachment processing metrics
+        multiprocess.MultiProcessCollector(registry)
         ProcessCollector(registry=registry)
         GCCollector(registry=registry)
         PlatformCollector(registry=registry)
     else:
-        # Fallback to single-process
         registry = REGISTRY
 
     return generate_latest(registry)
-
 
 def get_business_metrics(format_type="json"):
     """Return business metrics insight in requested format"""

@@ -1,0 +1,60 @@
+{
+  "severity": {
+    "no_damage": {
+      "severity": 0,
+      "level": "None",
+      "repair_days": 0
+    },
+    "01-minor": {
+      "severity": 1,
+      "level": "Low",
+      "repair_days": 1
+    },
+    "02-moderate": {
+      "severity": 2,
+      "level": "Medium",
+      "repair_days": 3
+    },
+    "03-severe": {
+      "severity": 3,
+      "level": "High",
+      "repair_days": 7
+    },
+    "bumper_scrape": {
+      "severity": 1,
+      "level": "Low",
+      "repair_days": 1
+    },
+    "door_scratch": {
+      "severity": 1,
+      "level": "Low",
+      "repair_days": 1
+    },
+    "dent": {
+      "severity": 2,
+      "level": "Medium",
+      "repair_days": 3
+    },
+    "head_lamp": {
+      "severity": 2,
+      "level": "Medium",
+      "repair_days": 3
+    },
+    "broken_headlight": {
+      "severity": 3,
+      "level": "High",
+      "repair_days": 7
+    }
+  },
+  "cost": {
+    "no_damage": 0,
+    "01-minor": 300000,
+    "02-moderate": 1000000,
+    "03-severe": 3000000,
+    "bumper_scrape": 500000,
+    "door_scratch": 750000,
+    "dent": 1200000,
+    "head_lamp": 2500000,
+    "broken_headlight": 4500000
+  }
+}
