@@ -100,6 +100,22 @@ services:
         condition: service_healthy
       mlflow:
         condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - car_analytics_network
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    container_name: frontend_car_analytics
+    ports:
+      - "4000:80"
+    depends_on:
+      - fastapi
     networks:
       - car_analytics_network
 
@@ -174,6 +190,7 @@ services:
     command:
       - -c
       - |
+        # Create logs necessary directories for Airflow
         mkdir -p /opt/airflow/logs/scheduler
         mkdir -p /opt/airflow/logs/dag_processor
         mkdir -p /opt/airflow/logs/task_handler
@@ -217,12 +234,19 @@ services:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_AIRFLOW_USER}:${POSTGRES_AIRFLOW_PASSWORD}@airflow-postgres:5432/${POSTGRES_AIRFLOW_DB}
       - AIRFLOW__WEBSERVER__DAG_DEFAULT_VIEW=graph
       - AIRFLOW__WEBSERVER__NAVBAR_COLOR=#1a1a2e
+      - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
+      - AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX=True
       - AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL=30
       - AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL=10
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__SCHEDULER__USE_JOB_SCHEDULE=False
-      - AIRFLOW__CORE__SECRET_KEY=${AIRFLOW__CORE__SECRET_KEY}
+      - AIRFLOW__CORE__SECRET_KEY=${AIRFLOW_SECRET_KEY}
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW_SECRET_KEY}
+      - AIRFLOW__API__SECRET_KEY=${AIRFLOW_SECRET_KEY}
       - AIRFLOW__LOGGING__BASE_LOG_FOLDER=/opt/airflow/logs
+      - AIRFLOW__METRICS__STATSD_HOST=prometheus
+      - AIRFLOW__METRICS__STATSD_PORT=9125
+      - AIRFLOW__METRICS__STATSD_PREFIX=airflow
       - PYTHONPATH=/opt/airflow:/app
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
@@ -256,8 +280,13 @@ services:
       - AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL=10
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__SCHEDULER__USE_JOB_SCHEDULE=False
-      - AIRFLOW__CORE__SECRET_KEY=${AIRFLOW__CORE__SECRET_KEY}
+      - AIRFLOW__CORE__SECRET_KEY=${AIRFLOW_SECRET_KEY}
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW_SECRET_KEY}
+      - AIRFLOW__API__SECRET_KEY=${AIRFLOW_SECRET_KEY}
       - AIRFLOW__LOGGING__BASE_LOG_FOLDER=/opt/airflow/logs
+      - AIRFLOW__METRICS__STATSD_HOST=prometheus
+      - AIRFLOW__METRICS__STATSD_PORT=9125
+      - AIRFLOW__METRICS__STATSD_PREFIX=airflow
       - PYTHONPATH=/opt/airflow:/app
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
