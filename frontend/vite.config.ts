@@ -10,10 +10,23 @@ export default defineConfig({
     },
   },
   server: {
+    host: '0.0.0.0',
     port: 5173,
+    watch: {
+      usePolling: true,
+      interval: 1000,
+    },
+    hmr: {
+      overlay: true,
+    },
     proxy: {
+      "/api": {
+        target: "http://fastapi:8000",  // Use service name, NOT localhost
+        changeOrigin: true,
+        secure: false,
+      },
       "/api-proxy": {
-        target: "http://localhost:8000",
+        target: "http://fastapi:8000",  // Use service name
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api-proxy/, ""),
       },

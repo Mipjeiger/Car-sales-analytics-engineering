@@ -1,4 +1,4 @@
-import { API_BASE, GRAFANA_URL, MLFLOW_URL } from "@/utils/constants";
+import { API_BASE_URL, GRAFANA_URL, MLFLOW_URL } from "@/utils/constants";
 import { useTheme } from "@/hooks/useTheme";
 import { useAppSelector } from "@/store/hooks";
 
@@ -18,7 +18,7 @@ export default function SettingsPage() {
       <section className="glass-card space-y-2 p-5 text-sm">
         <h2 className="font-semibold">Session</h2>
         <p>{user?.email} · {user?.role}</p>
-        <p className="subtle">API base: {API_BASE}</p>
+        <p className="subtle">API base: {API_BASE_URL}</p>
         <p>
           <a className="text-primary underline" href={MLFLOW_URL} target="_blank" rel="noreferrer">
             MLflow
