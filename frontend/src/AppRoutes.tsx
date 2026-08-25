@@ -10,12 +10,51 @@ import ModelManagementPage from "@/pages/ModelManagement";
 import SettingsPage from "@/pages/Settings";
 import LoginPage from "@/pages/Login";
 import { useAppSelector } from "@/store/hooks";
-import type { UserRole } from "@/types/common.types";
+import type { UserRole, User } from "@/types/auth";
+import {
+  AUTH_TOKEN_KEY,
+  AUTH_ROLE_KEY,
+  AUTH_EMAIL_KEY,
+} from "@/utils/constants";
 
-function Protected({ children, roles }: { children: ReactElement; roles?: UserRole[] }) {
-  const user = useAppSelector((s) => s.auth.user);
-  if (!user) return <Navigate to="/login" replace />;
-  if (roles && !roles.includes(user.role)) return <Navigate to="/" replace />;
+function Protected({
+  children,
+  roles,
+}: {
+  children: ReactElement;
+  roles?: UserRole[];
+}) {
+  const reduxUser = useAppSelector((s) => s.auth.user);
+
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  const role = localStorage.getItem(AUTH_ROLE_KEY);
+  const email = localStorage.getItem(AUTH_EMAIL_KEY);
+
+  let user: User | null = null;
+  
+  if (reduxUser) {
+    user = reduxUser;
+  } else if (token && role && email) {
+    user = {
+      email,
+      role: role.toLowerCase() as UserRole,
+      id: undefined,
+      name: undefined
+    };
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (roles && roles.length > 0) {
+    const userRole = user.role.toLowerCase();
+    const hasRequiredRole = roles.some(r => r.toLowerCase() === userRole);
+    if (!hasRequiredRole) {
+      return <Navigate to="/" replace />;
+    }
+  }
+
   return children;
 }
 
@@ -38,7 +77,7 @@ export function AppRoutes() {
         <Route
           path="/models"
           element={
-            <Protected roles={["Admin"]}>
+            <Protected roles={["admin"]}>
               <ModelManagementPage />
             </Protected>
           }

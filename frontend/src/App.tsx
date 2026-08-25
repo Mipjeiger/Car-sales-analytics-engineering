@@ -3,7 +3,7 @@ import { BrowserRouter } from "react-router-dom";
 import { Provider } from "react-redux";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { store } from "@/store/store";
-import { AppRoutes } from "@/AppRoutes";
+import { AppRoutes } from '@/AppRoutes';
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import { useTheme } from "@/hooks/useTheme";
 
