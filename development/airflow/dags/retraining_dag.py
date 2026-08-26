@@ -21,7 +21,7 @@ default_args = {
     "owner": "ml_engineer",
     "depends_on_past": False,
     "start_date": datetime(2022, 1, 1),
-    "retries": 2,
+    "retries": 1,
     "retry_delay": timedelta(minutes=5),
 }
 
@@ -31,9 +31,9 @@ dag = DAG(
     description="Retrain all models - Manual trigger only",
     schedule=None,  # No automatic schedule
     catchup=False,
+    is_paused_upon_creation=False,
     tags=["ml", "retraining"],
 )
-
 
 def check_data_changes():
     """Check data status before retraining"""
@@ -52,7 +52,6 @@ def check_data_changes():
 
     return True
 
-
 def check_models_exist():
     """Check if models exist in MinIO"""
     from training.utils import list_models_from_minio
@@ -66,7 +65,6 @@ def check_models_exist():
         logger.warning("⚠️ No models found in MinIO")
 
     return True
-
 
 # Tasks
 t0 = PythonOperator(
@@ -96,7 +94,6 @@ t3 = TriggerDagRunOperator(
     wait_for_completion=True,
     dag=dag,
 )
-
 
 def send_completion_notification():
     """Send notification that retraining is completed"""
