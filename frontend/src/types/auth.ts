@@ -5,4 +5,4 @@ export interface User {
   role: UserRole;
 }
 
-export type UserRole = 'admin' | 'user' | 'moderator' | 'viewer';
+export type UserRole = 'admin' | 'user' | 'viewer';

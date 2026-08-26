@@ -91,6 +91,7 @@ services:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - PYTHONPATH=/app:/app/app  
       - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc
+      - USE_PRODUCTION_SERVICES=${USE_PRODUCTION_SERVICES:-false}
     volumes:
       - .:/app 
       - ./tmp/prometheus_multiproc:/tmp/prometheus_multiproc
@@ -108,14 +109,19 @@ services:
   frontend:
     build:
       context: ../frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_BASE_URL: /api
+      dockerfile: Dockerfile.dev
     container_name: frontend_car_analytics
     ports:
-      - "4000:80"
+     - "4000:5173"
     depends_on:
       - fastapi
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_DOCKER_ENV=true
+      - NODE_ENV=development
+    command: npm run dev -- --host 0.0.0.0 --port 5173
     networks:
       - car_analytics_network
 

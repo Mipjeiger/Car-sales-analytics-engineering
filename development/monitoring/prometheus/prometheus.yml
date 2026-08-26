@@ -39,12 +39,6 @@ scrape_configs:
       - targets: ["node_exporter:9100"]
     scrape_interval: 15s
 
-  # Dagster metrics
-  - job_name: "dagster"
-    static_configs:
-      - targets: ["dagster:3000"]
-    scrape_interval: 15s
-
   # MinIO metrics
   - job_name: "minio"
     metrics_path: /minio/v2/metrics/cluster
@@ -52,8 +46,16 @@ scrape_configs:
       - targets: ["minio:9000"]
     scrape_interval: 15s
 
-  # Custom application metrics
-  - job_name: "car_api_metrics"
+  # Airflow metrics
+  - job_name: "airflow"
     static_configs:
-      - targets: ["fastapi:8001"]
-    scrape_interval: 10s
+      - targets: ["airflow:8080"]
+    metrics_path: "/metrics"
+    scrape_interval: 15s
+
+  # Airflow scheduler metrics
+  - job_name: "airflow_scheduler"
+    static_configs:
+      - targets: ["airflow:8080"]
+    metrics_path: "/metrics"
+    scrape_interval: 15s

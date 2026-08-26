@@ -5,7 +5,7 @@ import { loginSuccess } from "@/store/slices/authSlice";
 import { AUTH_LOGIN_URL } from "@/utils/constants";
 import type { UserRole, User } from "@/types/auth";
 
-interface LoginSuccessResponse {
+interface LoginResponse {
   access_token: string;
   token_type: "bearer";
   role: string;
@@ -14,7 +14,11 @@ interface LoginSuccessResponse {
 }
 
 interface LoginErrorResponse {
-  detail?: string;
+  detail?: string | Array<{ msg?: string }>;
+}
+
+function isUserRole(value: string): value is UserRole {
+  return value === "admin" || value === "analyst" || value === "viewer";
 }
 
 export default function Login() {
@@ -25,6 +29,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -34,90 +39,68 @@ export default function Login() {
     try {
       const response = await fetch(AUTH_LOGIN_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password,
+        }),
       });
 
-      let payload: LoginSuccessResponse | LoginErrorResponse | null = null;
-      try {
-        payload = await response.json();
-      } catch {
-        payload = null;
-      }
+      const payload: unknown = await response.json().catch(() => null);
 
       if (!response.ok) {
-        const detail =
-          payload && "detail" in payload ? payload.detail : undefined;
-        throw new Error(detail ?? "Invalid email or password");
+        const errorPayload = payload as LoginErrorResponse | null;
+        const detail = errorPayload?.detail;
+
+        const message = Array.isArray(detail)
+          ? detail[0]?.msg
+          : detail;
+
+        throw new Error(message || "Invalid email or password");
       }
 
-      if (!payload || !("access_token" in payload)) {
-        throw new Error("Login succeeded but token is missing from response");
+      const data = payload as Partial<LoginResponse>;
+
+      if (
+        typeof data.access_token !== "string" ||
+        typeof data.email !== "string" ||
+        typeof data.role !== "string"
+      ) {
+        throw new Error("Invalid login response from server");
+      }
+
+      const role = data.role.toLowerCase();
+
+      if (!isUserRole(role)) {
+        throw new Error("Invalid user role returned by server");
       }
 
       const user: User = {
-        email: payload.email,
-        role: payload.role.toLowerCase() as UserRole,
+        email: data.email,
+        role,
         id: undefined,
-        name: undefined
+        name: undefined,
       };
 
       dispatch(
         loginSuccess({
           user,
-          token: payload.access_token,
-        }),
+          token: data.access_token,
+        })
       );
 
       navigate("/", { replace: true });
     } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "An unexpected error occurred";
-      setError(errorMessage);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to connect to the authentication server"
+      );
     } finally {
       setLoading(false);
     }
   }
-
-  return (
-    <div className="login-container">
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label htmlFor="email">Email</label>
-          <input
-            id="email"
-            type="email"
-            placeholder="Enter your email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            autoComplete="email"
-            required
-          />
-        </div>
-
-        <div>
-          <label htmlFor="password">Password</label>
-          <input
-            id="password"
-            type="password"
-            placeholder="Enter your password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete="current-password"
-            required
-          />
-        </div>
-
-        {error && (
-          <div role="alert" style={{ color: 'red', marginTop: '10px' }}>
-            {error}
-          </div>
-        )}
-
-        <button type="submit" disabled={loading} style={{ marginTop: '15px' }}>
-          {loading ? "Signing in..." : "Sign in"}
-        </button>
-      </form>
-    </div>
-  );
 }
