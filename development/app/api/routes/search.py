@@ -5,7 +5,7 @@ Search Routes - FastAPI endpoints for computer vision image search
 import logging
 import os
 import tempfile
-from typing import Annotated, List
+from typing import Annotated, List, Optional, Dict
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 from api.services.cv_search import CVSearchService, get_cv_search
@@ -13,6 +13,11 @@ from api.services.cv_search import CVSearchService, get_cv_search
 # Configure logging & router
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# ============================================
+# Environment Configuration
+# ============================================
+USE_PRODUCTION = os.getenv("USE_PRODUCTION_SERVICES", "false").lower() == "true"
 
 # ==========================================
 # Schemas
@@ -38,11 +43,32 @@ class StatsResponse(BaseModel):
     brands: int
 
 # ==========================================
-# Endpoints
+# CV Search Routes
 # ==========================================
-# Configure allowed extensions for image uploads
+def get_cv_search():
+    """Get the appropriate CV search service based on the environment"""
+    if USE_PRODUCTION:
+        try:
+            from api.services.cv_search_production import get_cv_searcg as get_prod_cv_search
+            cv_search = get_prod_cv_search()
+            logger.info("✅ Using production CV search service.")
+            return cv_search
+
+        except Exception as e:
+            logger.warning("⚠️ Failed to load production CV search service. Falling back to development service.")
+
+    from api.services.cv_search import get_cv_search as get_local_cv_search
+    logger.info("💻 Using local CV Search")
+    return get_local_cv_search()
+
+# ==========================================
+# Allowed Extentions
+# =========================================
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".gif", ".webp"}
 
+# ==========================================
+# API Endpoints
+# ==========================================
 @router.post(
     "/similar",
     response_model=SearchResponse,
@@ -68,18 +94,28 @@ async def search_similar(
             detail="❌ Invalid file format. Uploaded file must be an image.",
         )
 
-    tmp_path = None  # Initialize tmp_path for cleanup in finally block
+    tmp_path = None 
+    cv_service = get_cv_search()
+
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             content = await file.read()
             tmp.write(content)
             tmp_path = tmp.name
 
-        results = cv_service.search_by_image(tmp_path, k)
+        # Use the service's search method
+        if hasattr(cv_service, "search_by_image"):
+            results = cv_service.search_by_image(tmp_path, k=k)
+        elif hasattr(cv_service, "search"):
+            results = cv_service.search(tmp_path, k=k)
+        else:
+            results = cv_service.search_similar(tmp_path, k=k) if hasattr(cv_service, "search_similar") else []
 
         if not results:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, 
-                                detail=f"❌ No similar cars found matching the query image ({file.filename}).")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="❌ No similar cars found for the provided image.",
+            )
 
         return SearchResponse(
             results=[SearchResult(**r) for r in results],
@@ -91,7 +127,7 @@ async def search_similar(
         raise
 
     except Exception as exc:
-        logger.exception("Visual search failed unexpectedly.")
+        logger.exception("Failed to process image search.")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="❌ An error occurred while processing the image search.",
@@ -99,42 +135,83 @@ async def search_similar(
 
     finally:
         if tmp_path and os.path.exists(tmp_path):
-            os.unlink(tmp_path)
+            os.remove(tmp_path)
 
 @router.get(
     "/brands",
     response_model=BrandsResponse,
     summary="List available car brands",
 )
-async def list_brands(
-    cv_service: CVSearchService = Depends(get_cv_search),
-):
+async def list_brands():
     """List all available car brands indexed in the system."""
     try:
-        brands = cv_service.get_available_brands()
-        return BrandsResponse(brands=brands, total=len(brands))
+        cv_service = get_cv_search()
+
+        if hasattr(cv_service, "get_available_brands"):
+            brands = cv_service.get_available_brands()
+        elif hasattr(cv_service, "feature_data"):
+            brands = list(set([d['brand'] for d in cv_service.feature_data]))
+        else:
+            brands = []
+
+        return BrandsResponse(brands=sorted(brands), total=len(brands))
+
     except Exception as exc:
-        logger.exception("Failed to retrieve brands.")
+        logger.exception("Failed to fetch available brands.")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="❌ Failed to retrieve brand list.",
+            detail="❌ Failed to retrieve available brands.",
         ) from exc
-
+    
 @router.get(
     "/stats",
     response_model=StatsResponse,
     summary="Get search service statistics",
 )
-async def search_stats(
-    cv_service: CVSearchService = Depends(get_cv_search),
-):
+async def search_stats():
     """Get indexing and feature statistics for the search service."""
     try:
-        stats = cv_service.get_stats()
+        cv_service = get_cv_search()
+
+        if hasattr(cv_service, "get_stats"):
+            stats = cv_service.get_stats()
+        elif hasattr(cv_service, "index") and hasattr(cv_service, "metadata"):
+            stats = {
+                "total_images": cv_service.index.ntotal,
+                "feature_dimension": cv_service.metadata.get("feature_dimension", 0),
+                "brands": len(set([d['brand'] for d in cv_service.feature_data])) if hasattr(cv_service, 'feature_data') else 0
+            }
+        else:
+            stats = {
+                "total_images": 0,
+                "feature_dimension": 0,
+                "brands": 0
+            }
+
         return StatsResponse(**stats)
+
     except Exception as exc:
         logger.exception("Failed to fetch search stats.")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="❌ Failed to retrieve search statistics.",
         ) from exc
+
+@router.get("/status")
+async def get_search_status():
+    """Check the status of the search service."""
+    try:
+        cv_service = get_cv_search()
+        source = "Production (MinIO)" if USE_PRODUCTION else "Local"
+        return {
+            "status": "healthy",
+            "source": source,
+            "environment": "production" if USE_PRODUCTION else "development",
+            "stats": await search_stats() if hasattr(cv_service, "get_stats") else {}
+        }
+    
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e)
+        }
