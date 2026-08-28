@@ -54,7 +54,7 @@ def validate_cv_model():
         config=Config(signature_version="s3v4"),
         region_name="us-east-1",
     )
-
+    
     try:
         s3.head_object(Bucket="mlflow-artifacts", Key="computer_vision/car_index.faiss")
         logger.info("✅ CV model validated in MinIO")
@@ -65,7 +65,7 @@ def register_cv_mlflow():
     """Load CV model from MinIO to MLflow"""
     from mlflow_utils.load_existing_models import MLflowModelLoader
     loader = MLflowModelLoader()
-    loader.load_cv_model()
+    loader.load_cv_models()
 
 t1 = PythonOperator(
     task_id="run_cv_training",
