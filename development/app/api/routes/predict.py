@@ -64,7 +64,15 @@ default_sales_model = available_models.get("sales_models", ["XGBoost"])[0] if av
 @router.get("/models", response_model=AvailableModelsResponse)
 async def list_available_models():
     try:
-        return predictor.get_available_models()
+        if hasattr(predictor, 'get_available_models'):
+            return predictor.get_available_models()
+
+        # Fallback for local predictor
+        return {
+            "sales_models": ["XGBoost", "Random Forest", "Decision Tree", "CatBoost"],
+            "quantity_models": ["XGBoost", "Random Forest", "Decision Tree", "CatBoost"]
+        }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving available models: {str(e)}")
 
