@@ -71,65 +71,133 @@ class CarChatbot:
             'greeting': re.compile(r'\b(hi|hello|hey|good morning|good afternoon)\b', re.I),
         }
 
+    def budget_tier(self, budget: int) -> str:
+        """Categorize budget into tiers based on quantiles of the dataset"""
+        if self.df.empty or "price" not in self.df.columns:
+            return "unknown"
+
+        prices = pd.to_numeric(self.df['price'], errors='coerce').dropna()
+        if prices.empty:
+            return "unknown"
+
+        q1, q2, q3 = prices.quantile([0.25, 0.5, 0.75])
+
+        if budget <= q1:
+            return "low"
+        elif budget <= q2:
+            return "medium"
+        elif budget <= q3:
+            return "high"
+        else:
+            return "high tier"
+
+    def use_case_tier(self, use_case: str) -> str:
+        """Categorize use case into tiers based on common patterns"""
+        use_case_lower = use_case.lower()
+
+        if re.search(r'\b(family|family trip|mudik|liburan|vacation|holiday)\b', use_case_lower):
+            return "family"
+        elif re.search(r'\b(fashion|stylish|style|luxury)\b', use_case_lower):
+            return "fashion"
+        elif re.search(r'\b(sport|racing|performance)\b', use_case_lower):
+            return "sport"
+        else:
+            return "general"
+
     def detect_intent(self, message: str) -> str:
         """Detect user intent from message"""
-        for intent, pattern in self.intent_patterns.items():
-            if pattern.search(message):
+        text = str(message).strip()
+
+        priority = [
+            "greeting",
+            "compare",
+            "recommend",
+            "specs",
+            "sales",
+            "price",
+        ]
+
+        for intent in priority:
+            pattern = self.intent_patterns.get(intent)
+            if pattern.search(text):
                 return intent
-        return 'default'
+
+        return "default"
+
+    def _parse_budget(self, message: str) -> Optional[int]:
+        """Parse budgets properly from user message, considering currency and scale units"""
+        text = message.lower().replace(" ", "")
+
+        match = re.search(
+            r"(?:budget|under|below|max|harga|rp|idr)?[:=]?"
+            r"(\d+(?:[.,]\d+)?)"
+            r"(juta|million|miliar|milliard|billion|m|k|rb|ribu|thousand)\b",
+            text,
+        )
+
+        if not match:
+            return None
+
+        try:
+            # Decimal separator is treated as a decimal for unit-based scaling values
+            value = float(match.group(1).replace(",", "."))
+            unit = match.group(2)
+
+            multiplier = {
+                "juta": 1_000_000,
+                "million": 1_000_000,
+                "m": 1_000_000,
+                "miliar": 1_000_000_000,
+                "milliard": 1_000_000_000,
+                "billion": 1_000_000_000,
+                "k": 1_000,
+                "rb": 1_000,
+                "ribu": 1_000,
+                "thousand": 1_000,
+            }[unit]
+
+            return int(value * multiplier)
+
+        except (ValueError, KeyError):
+            return None
 
     def extract_entities(self, message: str) -> Dict[str, Any]:
         """Extract entities like budget, company, and model dynamically from real dataset"""
-        entities = {}
-        message_lower = message.lower()
+        entities: Dict[str, Any] = {}
+        text = str(message).lower()
 
-        # Qualitative Budget Mapping (e.g., "low budget", "cheap")
-        if re.search(
-            r'\b(low budget|cheap|affordable|murah|entry level)\b', message_lower
-        ):
-            default_low_budget = int(self.df['price'].quantile(0.25)) if not self.df.empty else 175_000_000
-            entities['budget'] = default_low_budget
-            entities['budget_tier'] = 'low'
+        # Budget tier
+        if re.search(r"\b(low|cheap|affordable|murah|entry[- ]level)\b", text):
+            entities["budget_tier"] = "low"
+        elif re.search(r"\b(medium|mid|moderate|menengah)\b", text):
+            entities["budget_tier"] = "medium"
+        elif re.search(r"\b(high|expensive|luxury|premium|tinggi)\b", text):
+            entities["budget_tier"] = "high"
 
-        # Use-Case Extraction ("family trip")
-        if re.search(
-            r'\b(family|family trip|mudik|liburan|vacation)\b', message_lower
-        ):
-            entities['use_case'] = 'family'
-            entities['preferred_body_style'] = ['SUV', 'Passenger']
+        # Numeric budget
+        budget = self._parse_budget(text)
+        if budget is not None:
+            entities['budget'] = budget
+            entities['budget_tier'] = self.budget_tier(budget)
 
-        # 2. Extract numeric budget with mandatory currency context or scale unit
-        budget_match = re.search(
-            r'(?:budget|under|below|max|harga|rp|idr)?\s*[\:\=]?\s*'
-            r'(\d+(?:[\.,]\d+)?)\s*'
-            r'(juta|milliard|miliar|million|billion|m|k|rb|ribu|b)?\b',
-            message_lower
-        )
+        # Use case tier extraction
+        if re.search(r"\b(family|trip|mudik|liburan|vacation|holiday)\b", text):
+            entities["use_case_tier"] = "family"
+        elif re.search(r"\b(fashion|stylish|style|luxury|nongkrong|chill)\b", text):
+            entities["use_case_tier"] = "fashion"
+        elif re.search(r"\b(sport|racing|performance|race|competition)\b", text):
+            entities["use_case_tier"] = "sport"
+        else:
+            entities["use_case_tier"] = "general"
 
-        if budget_match and not 'family' in message_lower and budget_match.group(2):
-            try:
-                raw_str = budget_match.group(1).replace(',', '').replace('.', '')
-                val = float(raw_str)
-                unit = budget_match.group(2)
-
-                if unit in ['juta', 'million', 'm']:
-                    val *= 1_000_000
-                elif unit in ['k', 'rb', 'ribu', 'thousand']:
-                    val *= 1_000
-                entities['budget'] = int(val)
-
-            except ValueError:
-                pass
-
-        # 3. Dynamic Company Matching
-        for company in self.companies:
-            if re.search(rf'\b{re.escape(company)}\b', message_lower):
+        # Match longer name first to avoid partial matches
+        for company in sorted(self.companies, key=len, reverse=True):
+            if re.search(rf"\b{re.escape(company)}\b", text):
                 entities['company'] = company
                 break
 
-        # 4. Dynamic Model Matching
-        for model in self.models:
-            if re.search(rf'\b{re.escape(model)}\b', message_lower):
+        for model in sorted(self.models, key=len, reverse=True):
+            if re.search(rf"\b{re.escape(model)}\b", text):
                 entities['model'] = model
                 break
 
@@ -142,50 +210,71 @@ class CarChatbot:
         if self.df.empty:
             return "No historical sales database context available."
 
-        model = entities.get('model')
-        company = entities.get('company')
-        budget = entities.get('budget')
-
         filtered = self.df.copy()
 
-        if intent == 'sales':
-            top_sales = (
-                self.df.groupby(['company', 'model'])
-                .size()
-                .reset_index(name='sales_count')
-                .sort_values(by='sales_count', ascending=False)
-                .head(7)
-            )
-            return f'Top 7 best-selling models:\n{top_sales.to_string(index=False)}'
+        # Ensure numeric price
+        if "price" in filtered.columns:
+            filtered['price'] = pd.to_numeric(filtered['price'], errors='coerce')
+            filtered = filtered.dropna(subset=['price'])
 
-        # Handle specs, price, recommend, and general query intents
-        if intent in ['specs', 'price', 'recommend', 'default']:
-            if model:
-                filtered = filtered[filtered['model_clean'] == model]
-            elif company:
-                filtered = filtered[filtered['company_clean'] == company]
+        # Exact filters
+        if entities.get('company') and 'company_clean' in filtered.columns:
+            filtered = filtered[filtered['company_clean'] == entities['company']]
 
-            if budget:
-                filtered = filtered[filtered['price'] <= budget]
+        if entities.get('model') and 'model_clean' in filtered.columns:
+            filtered = filtered[filtered['model_clean'] == entities['model']]
 
-            if not filtered.empty:
-                summary = (
-                    filtered[
-                        ['company', 'model', 'price', 'engine', 'transmission', 'body_style']
-                    ]
-                    .drop_duplicates(subset=['company', 'model'])
-                    .head(7)
-                    .copy()
-                )
-                # Convert raw floats to readable IDR format (e.g. IDR 150,000,000)
-                summary['price'] = summary['price'].apply(lambda x: f"IDR {int(x):,}")
-                return f'Matching Car Catalog Context:\n{summary.to_string(index=False)}'
+        # Numeric filters
+        if entities.get('budget') and 'price' in filtered.columns:
+            filtered = filtered[filtered['price'] <= entities['budget']]
 
-            if budget:
-                min_price = int(self.df['price'].min())
-                return f'No models found within the budget of IDR {budget:,}. The minimum price in our database is IDR {min_price:,}.'
+        # Quantile budget filter
+        if entities.get('budget_tier') in {'low', 'medium', 'high'} and 'price' in filtered.columns:
+            prices = pd.to_numeric(self.df['price'], errors='coerce').dropna()
+            q1, q2, q3 = prices.quantile([0.25, 0.5, 0.75])
 
-        return f'General Dataset Summary: {len(self.df)} sales records indexed across {len(self.companies)} brands.'
+            tier = entities['budget_tier']
+
+            if tier == 'low':
+                filtered = filtered[filtered['price'] <= q1]
+            elif tier == 'medium':
+                filtered = filtered[(filtered['price'] > q1) & (filtered['price'] <= q2)]
+            elif tier == 'high':
+                filtered = filtered[filtered['price'] > q2]
+
+        if filtered.empty:
+            return "No matching records found in the database for the given criteria."
+
+        # Rank by relevant sales information when exist
+        if 'sales' in filtered.columns:
+            filtered['sales'] = pd.to_numeric(filtered['sales'], errors='coerce').fillna(0)
+            filtered = filtered.sort_values(by='sales', ascending=False)
+
+        columns = [
+            col for col in [
+                "company",
+                "model",
+                "price",
+                "sales",
+                "quantity",
+                "engine",
+                "transmission",
+                "body_style",
+            ]
+            if col in filtered.columns
+        ]
+
+        result = filtered[columns].drop_duplicates(
+            subset=[col for col in ['company', 'model'] if col in columns]
+        ).head(7).copy()
+
+        if 'price' in result.columns:
+            result['price'] = result['price'].map(lambda value: f"IDR {int(value):,}")
+
+        return (
+            "These are the only matching records from the database:\n"
+            f"{result.to_string(index=False)}"
+        )
 
     def _call_llm(self, prompt: str, system_prompt: str) -> Optional[str]:
         """Call HuggingFace first: if rate-limited or failed, fallback to Groq API"""
@@ -232,10 +321,15 @@ class CarChatbot:
 
         # 2. Construct system prompt for LLM
         system_prompt = (
-            'You are an expert AI Car Sales Consultant.'
-            'Answer the user question concisely using ONLY the provided database context. '
-            'Do not invent features or prices. Format output using clean Markdown.\n\n'
-            f'### DATABASE CONTEXT:\n{db_context}'
+            'You are a car sales assistant.'
+            'Answer only using the database context below. '
+            'Do not invent cars, prices, specifications, suitability, or sales facts.'
+            'If no matching record exists, say so clearly and politely.'
+            "Do not claim a car is suitable for racing unless the database supports it."
+            'Return concise Markdown.\n\n'
+            f'Intent: {intent}\n'
+            f'User requirements: {json.dumps(entities)}\n'
+            f'Database context:\n{db_context}'
         )
 
         # 3. Attempt LLM Generation (HF -> Groq)
@@ -265,6 +359,12 @@ class CarChatbot:
             self.context[session_id]['last_entities'] = result['entities']
 
         return result
+
+    def get_session_history(self) -> Dict[str, Any]:
+        """Return stored context for all active chat sessions"""
+        return {
+            str(session_id): dict(session_data) for session_id, session_data in self.context.items()
+        }
 
     def reset_context(self, session_id: str):
         if session_id in self.context:
