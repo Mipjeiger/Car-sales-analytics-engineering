@@ -164,17 +164,17 @@ def verify_model_saved():
         logger.warning(f"⚠️ MinIO client error: {e}")
 
 # Create tasks
-train_task = PythonOperator(
-    task_id='run_damage_training',
-    python_callable=run_damage_training,
-    dag=dag,
-)
+#train_task = PythonOperator(
+#    task_id='run_damage_training',
+#    python_callable=run_damage_training,
+ #   dag=dag,
+#)
 
-verify_task = PythonOperator(
-    task_id='verify_model_saved',
-    python_callable=verify_model_saved,
-    dag=dag,
-)
+#verify_task = PythonOperator(
+#    task_id='verify_model_saved',
+#    python_callable=verify_model_saved,
+#    dag=dag,
+#)
 
 # Set task dependencies
-train_task >> verify_task
+#train_task >> verify_task
