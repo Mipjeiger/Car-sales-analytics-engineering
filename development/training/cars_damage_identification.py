@@ -17,12 +17,14 @@ import torch
 import torch.nn as nn
 from botocore.client import Config as BotoConfig
 from dotenv import load_dotenv
-from PIL import Image
+from PIL import Image, ImageFile
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from transformers import ViTForImageClassification, ViTImageProcessor
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 # ---------------------------------------------------------------------------
 # Logging Configuration
@@ -149,31 +151,32 @@ def resolve_image_path(image_path: str, config: Config = cfg) -> Optional[Path]:
     path_str = str(image_path).strip()
 
     # 1. Direct hit check
-    direct_path = Path(path_str)
-    if direct_path.exists() and direct_path.is_file():
-        return direct_path
+    p = Path(path_str)
+    if p.exists() and p.is_file():
+        return p.resolve()
 
     # 2. Strip relative traversal operators
-    clean_path_str = path_str.replace("../", "").lstrip("/")
+    clean_relative = path_str.replace("../", "").lstrip("/")
 
     # 3. Handle 'cars_damage_dataset' subpath matching
-    if "cars_damage_dataset" in clean_path_str:
-        sub_path = clean_path_str.split("cars_damage_dataset")[-1]
+    if "cars_damage_dataset/" in clean_relative:
+        sub_path = clean_relative.split("cars_damage_dataset/")[-1]
         candidate = config.image_root / sub_path
         if candidate.exists() and candidate.is_file():
-            return candidate
+            return candidate.resolve()
 
     # 4. Fallback to image root
     filename = Path(path_str).name
     candidates = [
-        config.project_root / clean_path_str,
+        config.image_root / clean_relative,
         config.image_root / filename,
         config.image_root / "image" / filename,
+        config.project_root / clean_relative,
     ]
 
     for candidate in candidates:
         if candidate.exists() and candidate.is_file():
-            return candidate
+            return candidate.resolve()
 
     return None
 
@@ -185,15 +188,23 @@ def load_dataset(config: Config = cfg) -> Optional[pd.DataFrame]:
         return None
 
     df = pd.read_csv(path)
-    if "image" in df.columns:
-        df["image_path"] = df["image"].apply(lambda x: str(resolve_image_path(x) or ""))
 
-        # Drop rows where images could not be resolved
-        missing_count = (df["image_path"] == "").sum()
-        if missing_count > 0:
-            logger.warning(f"{missing_count} images could not be resolved and will be dropped.")
-            df = df[df["image_path"] != ""].reset_index(drop=True)
+    def resolve_row(row):
+        resolved = resolve_image_path(row.get("image_path"))
+        if not resolved:
+            resolved = resolve_image_path(row.get("image"))
+        return str(resolved) if resolved else ""
 
+    df["resolved_image_path"] = df.apply(resolve_row, axis=1)
+
+    # Log and drop unresolvable images
+    missing_count = (df["resolved_image_path"] == "").sum()
+    if missing_count > 0:
+        logger.warning(f"{missing_count} images could not be resolved and will be dropped.")
+        df = df[df["resolved_image_path"] != ""].reset_index(drop=True)
+
+    # Assign back to image_path
+    df["image_path"] = df["resolved_image_path"]
     return df
 
 def get_severity_mapping() -> Dict:
@@ -236,12 +247,14 @@ class CarDamageDataset(Dataset):
         label = self.df.iloc[idx]["encoded_label"]
 
         try:
-            image = Image.open(img_path).convert("RGB")
-        except Exception as err:
-            logger.warning(f"Failed loading image at index {idx}: {err}")
-            image = Image.new("RGB", (224, 224), "gray")
+            with Image.open(img_path).convert("RGB") as img:
+                image = img.convert("RGB")
+                inputs = self.processor(images=image, return_tensors="pt")
 
-        inputs = self.processor(images=image, return_tensors="pt")
+        except Exception:
+            # Fallback dummy tensor
+            inputs = self.processor(images=Image.new("RGB", (224, 224), "gray"), return_tensors="pt")
+
         return inputs["pixel_values"].squeeze(0), torch.tensor(label, dtype=torch.long)
 
 # ---------------------------------------------------------------------------
@@ -289,8 +302,9 @@ class CarDamageTrainer:
     def train_epoch(self, loader: DataLoader, optimizer: torch.optim.Optimizer, criterion: nn.Module) -> Tuple[float, float]:
         self.model.train()
         total_loss, correct, total = 0.0, 0, 0
+        total_batches = len(loader)
 
-        for pixels, labels in tqdm(loader, desc="Training", leave=False):
+        for i, (pixels, labels) in enumerate(loader):
             pixels, labels = pixels.to(self.device), labels.to(self.device)
 
             optimizer.zero_grad()
@@ -307,7 +321,11 @@ class CarDamageTrainer:
             correct += (preds == labels).sum().item()
             total += labels.size(0)
 
-        return total_loss / len(loader), correct / total
+            # Log progress every 10 batches
+            if (i + 1) % 10 == 0 or (i + 1) == total_batches:
+                logger.info(f"Batch {i+1}/{total_batches} - Loss: {loss.item():.4f}")
+
+        return total_loss / total_batches, correct / total
 
     def evaluate(self, loader: DataLoader) -> float:
         self.model.eval()
