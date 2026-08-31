@@ -222,60 +222,32 @@ async def get_search_status():
              summary="Detect damage in car image")
 async def detect_damage(file: UploadFile = File(...)):
     """Detect damage in the uploaded car image."""
-    suffix = Path(file.filename or ".jpg").suffix.lower()
-
-    if suffix not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="❌ Invalid file format. Uploaded file must be an image.",
-        )
-
-    tmp_path: str | None = None
-
     try:
-        content = await file.read()
+        cv_service = get_cv_search()
 
-        if not content:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="❌ Uploaded file is empty.",
-            )
+        # Save temp file
+        import tempfile
+        suffix = Path(file.filename or ".jpg").suffix.lower()
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            content = await file.read()
             tmp.write(content)
             tmp_path = tmp.name
 
-        cv_service = get_cv_search()
+        try:
+            damage_info = await asyncio.to_thread(cv_service.detect_damage, tmp_path)
 
-        if not hasattr(cv_service, 'detect_damage'):
-            raise HTTPException(
-                status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                detail="❌ Damage detection is not implemented in the current CV search service.",
-            )
+            return {
+                "status": "success",
+                "damage_info": damage_info,
+                "query_image": file.filename
+            }
 
-        # Prevent blocking FastAPI's event loop
-        damage_info = await asyncio.to_thread(cv_service.detect_damage, tmp_path)
-        damage_info = damage_info or {}
+        finally:
+            os.unlink(tmp_path)
 
-        return DamageDetectionResponse(
-            status="damage detected" if damage_info else "no damage detected",
-            damage_info=damage_info,
-            query_image=file.filename or "uploaded_image.jpg",
-        )
-
-    except HTTPException:
-        raise
-
-    except Exception as exc:
-        logger.exception("Damage detection failed unexpectedly.")
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="❌ An error occurred while processing the damage detection.",
-        ) from exc
-
-    finally:
-        if tmp_path:
-            try:
-                os.unlink(tmp_path)
-            except Exception as e:
-                logger.warning(f"Failed to delete temporary file {tmp_path}: {e}")
+            detail=f"❌ Damage detection failed: {str(e)}"
+        )
