@@ -17,3 +17,4 @@ development/tmp
 frontend/node_modules
 frontend/dist
 frontend/README.md
+development/tmp/prometheus_multiproc/
