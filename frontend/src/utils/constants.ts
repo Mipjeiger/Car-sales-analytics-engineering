@@ -1,34 +1,34 @@
-// USE RELATIVE PATHS ONLY - No hardcoded URLs!
-export const API_BASE_URL = '/api';  
-export const WS_BASE_URL = '/ws';
+export const API_BASE_URL = '';
 
+// Auth endpoints - matches /auth router
 export const AUTH_LOGIN_PATH = "/auth/login";
-export const AUTH_LOGIN_URL = `${API_BASE_URL}${AUTH_LOGIN_PATH}`;
-
+export const AUTH_LOGIN_URL = "/auth/login";
 export const AUTH_TOKEN_KEY = "car_sales_access_token";
 export const AUTH_ROLE_KEY = "car_sales_role";
 export const AUTH_EMAIL_KEY = "car_sales_email";
-export const METRICS_URL = "/metrics";
 
+// API URLs - match FastAPI routes
 export const API_URLS = {
-  login: `${API_BASE_URL}/auth/login`,
-  register: `${API_BASE_URL}/auth/register`,
-  logout: `${API_BASE_URL}/auth/logout`,
-  user: `${API_BASE_URL}/user`,
-  dashboard: `${API_BASE_URL}/dashboard`,
-  analytics: `${API_BASE_URL}/analytics`,
-  chat: `${API_BASE_URL}/chat`,
-  damage: `${API_BASE_URL}/damage`,
-  metrics: `${API_BASE_URL}/metrics`,
-  models: `${API_BASE_URL}/predict/models`,
-  settings: `${API_BASE_URL}/settings`,
-  search: `${API_BASE_URL}/search`,
+  login: '/auth/login',
+  register: '/auth/register',
+  logout: '/auth/logout',
+  user: '/api/user',  // If this doesn't exist, change it
+  dashboard: '/api/dashboard',
+  analytics: '/api/analytics',
+  chat: '/chat', 
+  damage: '/api/damage',
+  metrics: '/metrics', 
+  models: '/predict/models',  
+  settings: '/api/settings',
+  search: '/search',  
+  health: '/health',  
+  business_metrics: '/business-metrics', 
 } as const;
 
-// WebSocket URL
+// WebSocket URL - matches /ws router
 export const WS_URL = '/ws';
-  
-// External services (these can stay as is since they're not proxied)
+
+// External services (these are not proxied)
 export const MLFLOW_URL = import.meta.env.VITE_MLFLOW_URL ?? "http://localhost:5003";
 export const GRAFANA_URL = import.meta.env.VITE_GRAFANA_URL ?? "http://localhost:3001";
 export const AIRFLOW_URL = import.meta.env.VITE_AIRFLOW_URL ?? "http://localhost:8080";
@@ -79,4 +79,8 @@ export const NAV_ITEMS = [
   { to: "/settings", label: "Settings", icon: "settings" },
 ] as const;
 
-export const getMetricsUrl = () => `${API_BASE_URL}${METRICS_URL}`;
+// Helper functions
+export const getMetricsUrl = () => '/metrics';
+export const getBusinessMetricsUrl = () => '/business-metrics';
+export const getModelsUrl = () => '/predict/models';
+export const getHealthUrl = () => '/health';

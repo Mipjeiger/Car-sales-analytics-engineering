@@ -8,32 +8,41 @@ import {
   IconButton, 
   Typography,
   CircularProgress,
-  Alert
+  Alert,
+  Chip
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
+import ConnectionStatus from '@/components/common/ConnectionStatus';
 
 interface Message {
   id: string;
   content: string;
   sender: 'user' | 'assistant';
   timestamp: Date;
+  intent?: string;
+  entities?: any;
 }
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      content: 'Hello! How can I help you today?',
+      content: '👋 Hello! Welcome to Car Sales Intelligence. How can I help you today?',
       sender: 'assistant',
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { isConnected, sendChatMessage, lastMessage } = useWebSocket();
+  // Use the WebSocket hook
+  const { 
+    isConnected, 
+    lastMessage, 
+    connectionError,
+    sendChatMessage 
+  } = useWebSocket();
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -42,42 +51,69 @@ export default function ChatPage() {
 
   // Handle incoming WebSocket messages
   useEffect(() => {
-    if (lastMessage) {
-      if (lastMessage.type === 'chat_response') {
-        // Add assistant response
-        const newMessage: Message = {
-          id: Date.now().toString(),
-          content: lastMessage.content || 'Received response',
-          sender: 'assistant',
-          timestamp: new Date(),
-        };
-        setMessages(prev => [...prev, newMessage]);
-        setIsLoading(false);
-      } else if (lastMessage.type === 'error') {
-        setError(lastMessage.error || 'WebSocket error');
-        setIsLoading(false);
-      }
+    if (!lastMessage) return;
+
+    console.log('📩 Processing message:', lastMessage);
+
+    if (lastMessage.type === 'chat_response') {
+      // Add assistant response
+      const newMessage: Message = {
+        id: Date.now().toString(),
+        content: lastMessage.content || 'Received response',
+        sender: 'assistant',
+        timestamp: new Date(),
+        intent: lastMessage.intent,
+        entities: lastMessage.entities,
+      };
+      setMessages(prev => [...prev, newMessage]);
+      setIsLoading(false);
+    } else if (lastMessage.type === 'error') {
+      console.error('❌ Server error:', lastMessage.error);
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        content: `❌ Error: ${lastMessage.error}`,
+        sender: 'assistant',
+        timestamp: new Date(),
+      }]);
+      setIsLoading(false);
+    } else if (lastMessage.type === 'connection') {
+      console.log('✅ Connected:', lastMessage.message);
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        content: lastMessage.message || 'Connected to server',
+        sender: 'assistant',
+        timestamp: new Date(),
+      }]);
     }
   }, [lastMessage]);
 
   const handleSendMessage = () => {
-    if (!input.trim() || !isConnected) return;
+    if (!input.trim() || !isConnected) {
+      if (!isConnected) {
+        console.warn('⚠️ Cannot send message: Not connected');
+      }
+      return;
+    }
 
     // Add user message
     const userMessage: Message = {
       id: Date.now().toString(),
-      content: input,
+      content: input.trim(),
       sender: 'user',
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, userMessage]);
     setIsLoading(true);
-    setError(null);
 
     // Send to WebSocket
-    const success = sendChatMessage(input);
+    const success = sendChatMessage(input.trim());
     if (!success) {
-      setError('Failed to send message. Please try again.');
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        content: '❌ Failed to send message. Please try again.',
+        sender: 'assistant',
+        timestamp: new Date(),
+      }]);
       setIsLoading(false);
     }
 
@@ -94,25 +130,37 @@ export default function ChatPage() {
   return (
     <Box sx={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
       <Paper elevation={3} sx={{ flex: 1, display: 'flex', flexDirection: 'column', p: 2 }}>
-        {/* Connection status */}
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1 }}>
-          <Box
-            sx={{
-              width: 10,
-              height: 10,
-              borderRadius: '50%',
-              bgcolor: isConnected ? 'success.main' : 'error.main',
-            }}
-          />
-          <Typography variant="caption" color="text.secondary">
-            {isConnected ? 'Connected' : 'Disconnected'}
-          </Typography>
+        {/* Header with connection status */}
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between',
+          mb: 2,
+          pb: 2,
+          borderBottom: '1px solid',
+          borderColor: 'divider'
+        }}>
+          <Typography variant="h6">💬 Chat Assistant</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Chip
+              label={isConnected ? 'Connected' : 'Disconnected'}
+              color={isConnected ? 'success' : 'error'}
+              size="small"
+            />
+            {connectionError && (
+              <Chip
+                label="Error"
+                color="warning"
+                size="small"
+              />
+            )}
+          </Box>
         </Box>
 
         {/* Error alert */}
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-            {error}
+        {connectionError && (
+          <Alert severity="warning" sx={{ mb: 2 }} onClose={() => {}}>
+            {connectionError}
           </Alert>
         )}
 
@@ -136,7 +184,16 @@ export default function ChatPage() {
                   borderRadius: 2,
                 }}
               >
-                <Typography variant="body1">{message.content}</Typography>
+                <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+                  {message.content}
+                </Typography>
+                {message.intent && message.sender === 'assistant' && (
+                  <Chip
+                    label={`Intent: ${message.intent}`}
+                    size="small"
+                    sx={{ mt: 1, opacity: 0.7 }}
+                  />
+                )}
                 <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', mt: 0.5 }}>
                   {message.timestamp.toLocaleTimeString()}
                 </Typography>
@@ -152,7 +209,7 @@ export default function ChatPage() {
         </Box>
 
         {/* Input area */}
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, borderTop: '1px solid', borderColor: 'divider', pt: 2 }}>
           <TextField
             fullWidth
             placeholder={isConnected ? 'Type your message...' : 'Connecting...'}

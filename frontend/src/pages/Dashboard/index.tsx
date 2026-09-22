@@ -12,7 +12,7 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div className="rounded-3xl bg-hero-gradient p-8 text-white shadow-glass">
         <p className="text-sm uppercase tracking-[0.25em] text-indigo-200">Overview</p>
-        <h1 className="mt-2 text-3xl font-semibold">Car Sales Intelligence</h1>
+        <h1 className="mt-2 text-3xl font-semibold">Car Sales Optimization System</h1>
         <p className="mt-2 max-w-2xl text-indigo-100">
           Predictions, visual search, damage QA, and LLM assistance on top of FastAPI, MLflow, Airflow, and Prometheus.
         </p>

@@ -1,5 +1,6 @@
+// frontend/src/AppRoutes.tsx
 import type { ReactElement } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Layout } from "@/components/common/Layout";
 import Dashboard from "@/pages/Dashboard";
 import SearchPage from "@/pages/Search";
@@ -24,6 +25,7 @@ function Protected({
   children: ReactElement;
   roles?: UserRole[];
 }) {
+  const location = useLocation();
   const reduxUser = useAppSelector((s) => s.auth.user);
 
   const token = localStorage.getItem(AUTH_TOKEN_KEY);
@@ -43,10 +45,12 @@ function Protected({
     };
   }
 
+  // If no user and not on login page, redirect to login
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // Check role authorization
   if (roles && roles.length > 0) {
     const userRole = user.role.toLowerCase();
     const hasRequiredRole = roles.some(r => r.toLowerCase() === userRole);
@@ -59,6 +63,15 @@ function Protected({
 }
 
 export function AppRoutes() {
+  const location = useLocation();
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  const user = useAppSelector((s) => s.auth.user);
+
+  // If user is on login page but already authenticated, redirect to dashboard
+  if (location.pathname === '/login' && (token || user)) {
+    return <Navigate to="/" replace />;
+  }
+
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />

@@ -35,5 +35,5 @@ export function ModelSelector({
 export function canAccess(path: string, role: UserRole) {
   const item = NAV_ITEMS.find((n) => n.to === path);
   if (!item) return true;
-  return !("adminOnly" in item && item.adminOnly) || role === "Admin";
+  return !("adminOnly" in item && item.adminOnly) || role === "admin";
 }

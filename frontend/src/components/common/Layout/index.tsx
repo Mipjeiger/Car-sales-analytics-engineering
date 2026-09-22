@@ -12,7 +12,7 @@ export function Layout() {
   const { theme, toggle } = useTheme();
   const [open, setOpen] = useState(false);
 
-  const items = NAV_ITEMS.filter((item) => !("adminOnly" in item && item.adminOnly) || user?.role === "Admin");
+  const items = NAV_ITEMS.filter((item) => !("adminOnly" in item && item.adminOnly) || user?.role === "admin");
 
   return (
     <div className="min-h-screen md:grid md:grid-cols-[260px_1fr]">
@@ -68,7 +68,7 @@ export function Layout() {
           <button className="btn-ghost md:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
             Menu
           </button>
-          <p className="hidden text-sm subtle md:block">Enterprise MLOps console</p>
+          <p className="hidden text-sm subtle md:block">🤖 AI System is here to make u helpful</p>
           <div className="flex items-center gap-3">
             <button className="btn-ghost" onClick={toggle} aria-label="Toggle theme">
               {theme === "dark" ? "Light" : "Dark"}
