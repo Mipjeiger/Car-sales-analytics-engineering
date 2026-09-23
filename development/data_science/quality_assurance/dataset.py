@@ -7,7 +7,6 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
-
 # Configuration
 pd.set_option("display.max_columns", None)
 SEED = 42
@@ -15,7 +14,6 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 print(f"Using device: {DEVICE}")
-
 
 class CarDamageDataset(Dataset):
     def __init__(self, image_paths, labels, transform=None):
